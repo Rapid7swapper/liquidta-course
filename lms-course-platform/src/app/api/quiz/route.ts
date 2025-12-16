@@ -1,12 +1,12 @@
 import { NextResponse } from "next/server";
-import { auth } from "@clerk/nextjs/server";
 import { createClient } from "@/lib/supabase/server";
 
 export async function GET(request: Request) {
   try {
-    const { userId } = await auth();
+    const supabase = await createClient();
+    const { data: { user } } = await supabase.auth.getUser();
 
-    if (!userId) {
+    if (!user) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
@@ -16,8 +16,6 @@ export async function GET(request: Request) {
     if (!quizId) {
       return NextResponse.json({ error: "Quiz ID required" }, { status: 400 });
     }
-
-    const supabase = await createClient();
 
     const { data: quiz, error } = await supabase
       .from('quizzes')
