@@ -1,10 +1,6 @@
-import { PrismaClient } from '@prisma/client'
+// This file is deprecated - use Supabase client instead
+// Import from '@/lib/supabase/server' for server-side operations
+// Import from '@/lib/supabase/client' for client-side operations
 
-const globalForPrisma = globalThis as unknown as {
-  prisma: PrismaClient | undefined
-}
-
-export const db = globalForPrisma.prisma ?? new PrismaClient()
-
-if (process.env.NODE_ENV !== 'production') globalForPrisma.prisma = db
-
+export { createClient as createServerClient } from './supabase/server'
+export { createClient as createBrowserClient } from './supabase/client'

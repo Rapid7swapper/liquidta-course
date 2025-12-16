@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { auth } from "@clerk/nextjs/server";
-import { db } from "@/lib/db";
+import { createClient } from "@/lib/supabase/server";
 
 export async function GET() {
   try {
@@ -10,21 +10,21 @@ export async function GET() {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
-    const progress = await db.lessonProgress.findMany({
-      where: {
-        enrollment: {
-          userId,
-        },
-      },
-      include: {
-        lesson: true,
-        enrollment: {
-          include: {
-            course: true,
-          },
-        },
-      },
-    });
+    const supabase = await createClient();
+
+    const { data: progress, error } = await supabase
+      .from('lesson_progress')
+      .select(`
+        *,
+        lessons (*),
+        enrollments (
+          *,
+          courses (*)
+        )
+      `)
+      .eq('enrollments.user_id', userId);
+
+    if (error) throw error;
 
     return NextResponse.json(progress);
   } catch (error) {
@@ -34,4 +34,3 @@ export async function GET() {
     );
   }
 }
-

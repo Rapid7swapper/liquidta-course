@@ -1,8 +1,8 @@
 import { NextResponse } from "next/server";
 import { auth } from "@clerk/nextjs/server";
-import { db } from "@/lib/db";
+import { createClient } from "@/lib/supabase/server";
 
-export async function GET(request: Request) {
+export async function GET() {
   try {
     const { userId } = await auth();
 
@@ -10,20 +10,20 @@ export async function GET(request: Request) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
-    const certificates = await db.certificate.findMany({
-      where: {
-        enrollment: {
-          userId,
-        },
-      },
-      include: {
-        enrollment: {
-          include: {
-            course: true,
-          },
-        },
-      },
-    });
+    const supabase = await createClient();
+
+    const { data: certificates, error } = await supabase
+      .from('certificates')
+      .select(`
+        *,
+        enrollments (
+          *,
+          courses (*)
+        )
+      `)
+      .eq('enrollments.user_id', userId);
+
+    if (error) throw error;
 
     return NextResponse.json(certificates);
   } catch (error) {
@@ -33,4 +33,3 @@ export async function GET(request: Request) {
     );
   }
 }
-

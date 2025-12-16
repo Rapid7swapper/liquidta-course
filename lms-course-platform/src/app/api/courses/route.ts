@@ -1,18 +1,22 @@
 import { NextResponse } from "next/server";
-import { db } from "@/lib/db";
+import { createClient } from "@/lib/supabase/server";
 
 export async function GET() {
   try {
-    const courses = await db.course.findMany({
-      where: { isPublished: true },
-      include: {
-        modules: {
-          include: {
-            lessons: true,
-          },
-        },
-      },
-    });
+    const supabase = await createClient();
+
+    const { data: courses, error } = await supabase
+      .from('courses')
+      .select(`
+        *,
+        modules (
+          *,
+          lessons (*)
+        )
+      `)
+      .eq('is_published', true);
+
+    if (error) throw error;
 
     return NextResponse.json(courses);
   } catch (error) {
@@ -22,4 +26,3 @@ export async function GET() {
     );
   }
 }
-

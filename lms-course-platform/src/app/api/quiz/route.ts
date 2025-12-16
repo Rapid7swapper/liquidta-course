@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { auth } from "@clerk/nextjs/server";
-import { db } from "@/lib/db";
+import { createClient } from "@/lib/supabase/server";
 
 export async function GET(request: Request) {
   try {
@@ -17,19 +17,21 @@ export async function GET(request: Request) {
       return NextResponse.json({ error: "Quiz ID required" }, { status: 400 });
     }
 
-    const quiz = await db.quiz.findUnique({
-      where: { id: quizId },
-      include: {
-        questions: {
-          include: {
-            options: true,
-          },
-          orderBy: {
-            position: "asc",
-          },
-        },
-      },
-    });
+    const supabase = await createClient();
+
+    const { data: quiz, error } = await supabase
+      .from('quizzes')
+      .select(`
+        *,
+        questions (
+          *,
+          question_options (*)
+        )
+      `)
+      .eq('id', quizId)
+      .single();
+
+    if (error) throw error;
 
     if (!quiz) {
       return NextResponse.json({ error: "Quiz not found" }, { status: 404 });
@@ -43,4 +45,3 @@ export async function GET(request: Request) {
     );
   }
 }
-
