@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
+import { createAdminClient } from '@/lib/supabase/admin'
 import { requireRole } from '@/lib/auth'
 import { User } from '@/lib/supabase/types'
 
@@ -186,6 +187,15 @@ export async function DELETE(
 
     if (deleteError) {
       throw new Error(`Database error: ${deleteError.message}`)
+    }
+
+    // Delete from Supabase Auth
+    try {
+      const adminClient = createAdminClient()
+      await adminClient.auth.admin.deleteUser(id)
+    } catch (authDeleteError) {
+      // Log but don't fail if auth deletion fails (user might not have auth account)
+      console.error('Error deleting auth user:', authDeleteError)
     }
 
     return NextResponse.json({ success: true, message: 'User deleted successfully' })

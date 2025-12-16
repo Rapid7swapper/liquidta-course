@@ -2,7 +2,6 @@
 
 import { useState } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
-import Link from 'next/link'
 import { createClient } from '@/lib/supabase/client'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -101,10 +100,7 @@ export default function SignInPage() {
               )}
             </Button>
             <p className="text-sm text-slate-400 text-center">
-              Don&apos;t have an account?{' '}
-              <Link href="/sign-up" className="text-violet-400 hover:text-violet-300">
-                Sign up
-              </Link>
+              This is an invite-only platform. Contact your administrator for access.
             </p>
           </CardFooter>
         </form>
