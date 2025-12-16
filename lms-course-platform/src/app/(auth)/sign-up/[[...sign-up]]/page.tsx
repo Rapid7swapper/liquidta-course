@@ -12,6 +12,8 @@ import { Alert, AlertDescription } from '@/components/ui/alert'
 import { Loader2, CheckCircle } from 'lucide-react'
 
 export default function SignUpPage() {
+  const [firstName, setFirstName] = useState('')
+  const [lastName, setLastName] = useState('')
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [confirmPassword, setConfirmPassword] = useState('')
@@ -24,6 +26,12 @@ export default function SignUpPage() {
     e.preventDefault()
     setLoading(true)
     setError(null)
+
+    if (!firstName.trim() || !lastName.trim()) {
+      setError('First name and last name are required')
+      setLoading(false)
+      return
+    }
 
     if (password !== confirmPassword) {
       setError('Passwords do not match')
@@ -44,6 +52,10 @@ export default function SignUpPage() {
       password,
       options: {
         emailRedirectTo: `${window.location.origin}/auth/callback`,
+        data: {
+          first_name: firstName.trim(),
+          last_name: lastName.trim(),
+        },
       },
     })
 
@@ -105,6 +117,32 @@ export default function SignUpPage() {
                 <AlertDescription>{error}</AlertDescription>
               </Alert>
             )}
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <Label htmlFor="firstName" className="text-slate-200">First Name</Label>
+                <Input
+                  id="firstName"
+                  type="text"
+                  placeholder="John"
+                  value={firstName}
+                  onChange={(e) => setFirstName(e.target.value)}
+                  required
+                  className="bg-slate-800 border-slate-700 text-white"
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="lastName" className="text-slate-200">Last Name</Label>
+                <Input
+                  id="lastName"
+                  type="text"
+                  placeholder="Doe"
+                  value={lastName}
+                  onChange={(e) => setLastName(e.target.value)}
+                  required
+                  className="bg-slate-800 border-slate-700 text-white"
+                />
+              </div>
+            </div>
             <div className="space-y-2">
               <Label htmlFor="email" className="text-slate-200">Email</Label>
               <Input
