@@ -1,0 +1,225 @@
+generator client {
+  provider = "prisma-client"
+  output   = "../src/generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+// Organizations (Companies using the platform)
+
+model Organization {
+  id          String   @id @default(cuid())
+  name        String
+  slug        String   @unique
+  logo        String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  
+  members     OrganizationMember[]
+  enrollments Enrollment[]
+}
+
+model OrganizationMember {
+  id             String       @id @default(cuid())
+  organizationId String
+  userId         String
+  role           MemberRole   @default(EMPLOYEE)
+  createdAt      DateTime     @default(now())
+  
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  
+  @@unique([organizationId, userId])
+  @@index([userId])
+}
+
+enum MemberRole {
+  OWNER
+  ADMIN
+  EMPLOYEE
+}
+
+// Course Structure
+
+model Course {
+  id          String   @id @default(cuid())
+  title       String
+  description String?  @db.Text
+  imageUrl    String?
+  isPublished Boolean  @default(false)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  
+  modules     Module[]
+  enrollments Enrollment[]
+}
+
+model Module {
+  id          String   @id @default(cuid())
+  title       String
+  description String?  @db.Text
+  position    Int
+  isPublished Boolean  @default(false)
+  courseId    String
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  
+  course      Course   @relation(fields: [courseId], references: [id], onDelete: Cascade)
+  lessons     Lesson[]
+  quiz        Quiz?
+  
+  @@index([courseId])
+}
+
+model Lesson {
+  id          String      @id @default(cuid())
+  title       String
+  description String?     @db.Text
+  videoUrl    String?
+  position    Int
+  isPublished Boolean     @default(false)
+  isFree      Boolean     @default(false)
+  moduleId    String
+  createdAt   DateTime    @default(now())
+  updatedAt   DateTime    @updatedAt
+  
+  module      Module      @relation(fields: [moduleId], references: [id], onDelete: Cascade)
+  resources   Resource[]
+  progress    LessonProgress[]
+  
+  @@index([moduleId])
+}
+
+model Resource {
+  id        String       @id @default(cuid())
+  name      String
+  url       String
+  type      ResourceType
+  lessonId  String
+  createdAt DateTime     @default(now())
+  
+  lesson    Lesson       @relation(fields: [lessonId], references: [id], onDelete: Cascade)
+  
+  @@index([lessonId])
+}
+
+enum ResourceType {
+  PDF
+  VIDEO
+  LINK
+  FILE
+}
+
+// Quiz System
+
+model Quiz {
+  id              String     @id @default(cuid())
+  moduleId        String     @unique
+  passingScore    Int        @default(80)
+  maxAttempts     Int?       // null = unlimited
+  timeLimitMinutes Int?
+  createdAt       DateTime   @default(now())
+  updatedAt       DateTime   @updatedAt
+  
+  module          Module     @relation(fields: [moduleId], references: [id], onDelete: Cascade)
+  questions       Question[]
+  attempts        QuizAttempt[]
+}
+
+model Question {
+  id            String   @id @default(cuid())
+  quizId        String
+  text          String   @db.Text
+  type          QuestionType
+  position      Int
+  points        Int      @default(1)
+  createdAt     DateTime @default(now())
+  
+  quiz          Quiz     @relation(fields: [quizId], references: [id], onDelete: Cascade)
+  options       QuestionOption[]
+  
+  @@index([quizId])
+}
+
+enum QuestionType {
+  MULTIPLE_CHOICE
+  TRUE_FALSE
+  MULTIPLE_SELECT
+}
+
+model QuestionOption {
+  id         String   @id @default(cuid())
+  questionId String
+  text       String
+  isCorrect  Boolean  @default(false)
+  position   Int
+  
+  question   Question @relation(fields: [questionId], references: [id], onDelete: Cascade)
+  
+  @@index([questionId])
+}
+
+model QuizAttempt {
+  id          String   @id @default(cuid())
+  quizId      String
+  userId      String
+  score       Int
+  passed      Boolean
+  answers     Json     // Store submitted answers
+  startedAt   DateTime @default(now())
+  completedAt DateTime?
+  
+  quiz        Quiz     @relation(fields: [quizId], references: [id], onDelete: Cascade)
+  
+  @@index([quizId])
+  @@index([userId])
+}
+
+// Progress Tracking
+
+model Enrollment {
+  id             String        @id @default(cuid())
+  userId         String
+  courseId       String
+  organizationId String?
+  enrolledAt     DateTime      @default(now())
+  completedAt    DateTime?
+  
+  course         Course        @relation(fields: [courseId], references: [id], onDelete: Cascade)
+  organization   Organization? @relation(fields: [organizationId], references: [id])
+  lessonProgress LessonProgress[]
+  certificate    Certificate?
+  
+  @@unique([userId, courseId])
+  @@index([courseId])
+  @@index([organizationId])
+}
+
+model LessonProgress {
+  id           String     @id @default(cuid())
+  lessonId     String
+  enrollmentId String
+  isCompleted  Boolean    @default(false)
+  watchedSeconds Int      @default(0)
+  totalSeconds Int        @default(0)
+  completedAt  DateTime?
+  updatedAt    DateTime   @updatedAt
+  
+  lesson       Lesson     @relation(fields: [lessonId], references: [id], onDelete: Cascade)
+  enrollment   Enrollment @relation(fields: [enrollmentId], references: [id], onDelete: Cascade)
+  
+  @@unique([lessonId, enrollmentId])
+  @@index([enrollmentId])
+}
+
+// Certificates
+
+model Certificate {
+  id           String     @id @default(cuid())
+  enrollmentId String     @unique
+  certificateId String    @unique @default(cuid()) // Public verification ID
+  issuedAt     DateTime   @default(now())
+  
+  enrollment   Enrollment @relation(fields: [enrollmentId], references: [id], onDelete: Cascade)
+}
