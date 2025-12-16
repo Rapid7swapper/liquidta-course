@@ -1,5 +1,4 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { clerkClient } from '@clerk/nextjs/server'
 import { createClient } from '@/lib/supabase/server'
 import { requireRole } from '@/lib/auth'
 import { User } from '@/lib/supabase/types'
@@ -56,11 +55,11 @@ export async function PUT(
     const currentUser = await requireRole(['super_admin', 'admin'])
     const { id } = await params
     const body = await request.json()
-    const { firstName, lastName, email } = body
+    const { firstName, lastName } = body
 
     const supabase = await createClient()
 
-    // First, fetch the existing user to get their clerk_id
+    // First, fetch the existing user
     const { data: existingUser, error: fetchError } = await supabase
       .from('users')
       .select('*')
@@ -85,45 +84,12 @@ export async function PUT(
       return NextResponse.json({ error: 'Cannot edit super admin accounts' }, { status: 403 })
     }
 
-    // Update user in Clerk
-    const clerk = await clerkClient()
-    try {
-      await clerk.users.updateUser(typedExistingUser.clerk_id!, {
-        firstName: firstName || typedExistingUser.first_name,
-        lastName: lastName || typedExistingUser.last_name,
-      })
-
-      // Update email if changed
-      if (email && email !== typedExistingUser.email) {
-        // Create new email address
-        await clerk.emailAddresses.createEmailAddress({
-          userId: typedExistingUser.clerk_id!,
-          emailAddress: email,
-          verified: true,
-          primary: true,
-        })
-      }
-    } catch (clerkError: unknown) {
-      console.error('Clerk update error:', clerkError)
-
-      if (clerkError && typeof clerkError === 'object' && 'errors' in clerkError) {
-        const errors = (clerkError as { errors: Array<{ message?: string; longMessage?: string }> }).errors
-        if (errors && errors.length > 0) {
-          const message = errors[0].longMessage || errors[0].message || 'Failed to update user in Clerk'
-          return NextResponse.json({ error: message }, { status: 422 })
-        }
-      }
-
-      throw clerkError
-    }
-
     // Update user in Supabase
     const { data: updatedUser, error: updateError } = await (supabase as any)
       .from('users')
       .update({
         first_name: firstName || typedExistingUser.first_name,
         last_name: lastName || typedExistingUser.last_name,
-        email: email || typedExistingUser.email,
         updated_at: new Date().toISOString(),
       })
       .eq('id', id)
@@ -174,7 +140,7 @@ export async function DELETE(
 
     const supabase = await createClient()
 
-    // First, fetch the existing user to get their clerk_id
+    // First, fetch the existing user
     const { data: existingUser, error: fetchError } = await supabase
       .from('users')
       .select('*')
@@ -212,21 +178,7 @@ export async function DELETE(
       }
     }
 
-    // Delete from Clerk first
-    const clerk = await clerkClient()
-    try {
-      await clerk.users.deleteUser(typedExistingUserDel.clerk_id!)
-    } catch (clerkError: unknown) {
-      console.error('Clerk delete error:', clerkError)
-      // If the user doesn't exist in Clerk, continue with database deletion
-      if (clerkError && typeof clerkError === 'object' && 'status' in clerkError) {
-        if ((clerkError as { status: number }).status !== 404) {
-          throw clerkError
-        }
-      }
-    }
-
-    // Delete from Supabase
+    // Delete from Supabase users table
     const { error: deleteError } = await supabase
       .from('users')
       .delete()

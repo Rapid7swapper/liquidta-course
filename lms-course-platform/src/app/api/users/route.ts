@@ -1,5 +1,4 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { clerkClient } from '@clerk/nextjs/server'
 import { createClient } from '@/lib/supabase/server'
 import { requireRole } from '@/lib/auth'
 import { UserRole, User } from '@/lib/supabase/types'
@@ -10,10 +9,10 @@ export async function POST(request: NextRequest) {
     const currentUser = await requireRole(['super_admin', 'admin'])
 
     const body = await request.json()
-    const { firstName, lastName, email, password, role } = body
+    const { firstName, lastName, email, role } = body
 
     // Validate required fields
-    if (!firstName || !lastName || !email || !password || !role) {
+    if (!firstName || !lastName || !email || !role) {
       return NextResponse.json(
         { error: 'Missing required fields' },
         { status: 400 }
@@ -37,56 +36,27 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    // Validate password length (Clerk requires at least 8 characters)
-    if (password.length < 8) {
+    // Create user in Supabase users table
+    // Note: The user will need to sign up via the auth flow to get authentication
+    const supabase = await createClient()
+
+    // Check if user with this email already exists
+    const { data: existingUser } = await supabase
+      .from('users')
+      .select('id')
+      .eq('email', email)
+      .single()
+
+    if (existingUser) {
       return NextResponse.json(
-        { error: 'Password must be at least 8 characters long' },
-        { status: 400 }
+        { error: 'A user with this email already exists' },
+        { status: 422 }
       )
     }
 
-    // Create user in Clerk
-    const clerk = await clerkClient()
-    let clerkUser
-    try {
-      clerkUser = await clerk.users.createUser({
-        firstName,
-        lastName,
-        emailAddress: [email],
-        password,
-        skipPasswordChecks: true, // Skip additional password policy checks
-        skipPasswordRequirement: false, // Still require password
-      })
-
-      // Mark the email as verified so password login works immediately
-      if (clerkUser.emailAddresses && clerkUser.emailAddresses.length > 0) {
-        const emailId = clerkUser.emailAddresses[0].id
-        await clerk.emailAddresses.updateEmailAddress(emailId, {
-          verified: true,
-        })
-      }
-    } catch (clerkError: unknown) {
-      console.error('Clerk error details:', clerkError)
-
-      // Handle specific Clerk errors
-      if (clerkError && typeof clerkError === 'object' && 'errors' in clerkError) {
-        const errors = (clerkError as { errors: Array<{ message?: string; longMessage?: string; code?: string }> }).errors
-        if (errors && errors.length > 0) {
-          const firstError = errors[0]
-          const message = firstError.longMessage || firstError.message || 'Failed to create user in Clerk'
-          return NextResponse.json({ error: message }, { status: 422 })
-        }
-      }
-
-      throw clerkError
-    }
-
-    // Create user in Supabase
-    const supabase = await createClient()
     const { data: dbUser, error: dbError } = await (supabase as any)
       .from('users')
       .insert({
-        clerk_id: clerkUser.id,
         email,
         first_name: firstName,
         last_name: lastName,
@@ -97,8 +67,6 @@ export async function POST(request: NextRequest) {
       .single()
 
     if (dbError) {
-      // If Supabase fails, delete the Clerk user to maintain consistency
-      await clerk.users.deleteUser(clerkUser.id)
       throw new Error(`Database error: ${dbError.message}`)
     }
 
@@ -112,7 +80,8 @@ export async function POST(request: NextRequest) {
         firstName: typedDbUser.first_name,
         lastName: typedDbUser.last_name,
         role: typedDbUser.role,
-      }
+      },
+      message: 'User created. They will need to sign up to set their password.'
     })
 
   } catch (error) {
@@ -126,7 +95,6 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
     }
 
-    // Handle Clerk-specific errors
     const errorMessage = error instanceof Error ? error.message : 'Failed to create user'
     return NextResponse.json({ error: errorMessage }, { status: 500 })
   }

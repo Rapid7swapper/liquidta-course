@@ -39,11 +39,11 @@ export default function StudentDashboard({ user }: StudentDashboardProps) {
 
   // Load progress from localStorage on mount
   useEffect(() => {
-    const savedProgress = localStorage.getItem(`progress_${user.supabaseId || user.clerkId}`)
+    const savedProgress = localStorage.getItem(`progress_${user.supabaseId || user.id}`)
     if (savedProgress) {
       setCourseProgress(JSON.parse(savedProgress))
     }
-  }, [user.supabaseId, user.clerkId])
+  }, [user.supabaseId, user.id])
 
   // Calculate progress percentage for a course
   const getProgressPercentage = (courseId: string) => {

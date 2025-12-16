@@ -1,9 +1,8 @@
-import { auth, currentUser } from '@clerk/nextjs/server'
 import { createClient } from '@/lib/supabase/server'
 import { User, UserRole } from '@/lib/supabase/types'
 
 export interface AuthUser {
-  clerkId: string
+  id: string
   supabaseId: string | null
   email: string
   firstName: string
@@ -13,47 +12,30 @@ export interface AuthUser {
 }
 
 export async function getCurrentUser(): Promise<AuthUser | null> {
-  const { userId } = await auth()
-
-  if (!userId) {
-    return null
-  }
-
-  const clerkUser = await currentUser()
-  if (!clerkUser) {
-    return null
-  }
-
   const supabase = await createClient()
+  const { data: { user } } = await supabase.auth.getUser()
 
-  // Try to find user by clerk_id first
+  if (!user) {
+    return null
+  }
+
+  // Try to find user in the users table
   let { data: dbUser } = await supabase
     .from('users')
     .select('*')
-    .eq('clerk_id', userId)
+    .eq('id', user.id)
     .single()
 
-  // If not found by clerk_id, try by email and update clerk_id
-  if (!dbUser && clerkUser.emailAddresses[0]?.emailAddress) {
-    const email = clerkUser.emailAddresses[0].emailAddress
-
+  // If not found by id, try by email
+  if (!dbUser && user.email) {
     const { data: userByEmail } = await supabase
       .from('users')
       .select('*')
-      .eq('email', email)
+      .eq('email', user.email)
       .single()
 
     if (userByEmail) {
-      const typedUserByEmail = userByEmail as User
-      // Update the clerk_id for this user
-      const { data: updatedUser } = await (supabase as any)
-        .from('users')
-        .update({ clerk_id: userId })
-        .eq('id', typedUserByEmail.id)
-        .select()
-        .single()
-
-      dbUser = updatedUser || typedUserByEmail
+      dbUser = userByEmail
     }
   }
 
@@ -62,11 +44,11 @@ export async function getCurrentUser(): Promise<AuthUser | null> {
   const role: UserRole = typedDbUser?.role || 'student'
 
   return {
-    clerkId: userId,
-    supabaseId: typedDbUser?.id || null,
-    email: clerkUser.emailAddresses[0]?.emailAddress || '',
-    firstName: clerkUser.firstName || typedDbUser?.first_name || '',
-    lastName: clerkUser.lastName || typedDbUser?.last_name || '',
+    id: user.id,
+    supabaseId: typedDbUser?.id || user.id,
+    email: user.email || '',
+    firstName: typedDbUser?.first_name || user.user_metadata?.first_name || '',
+    lastName: typedDbUser?.last_name || user.user_metadata?.last_name || '',
     role,
     dbUser: typedDbUser,
   }

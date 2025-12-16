@@ -4,7 +4,7 @@ import { User } from './supabase/types'
 export const mockUsers: Record<string, User> = {
   'super_admin': {
     id: '11111111-1111-1111-1111-111111111111',
-    clerk_id: 'user_super_admin',
+    clerk_id: null,
     email: 'superadmin@liquidacapital.com',
     first_name: 'Super',
     last_name: 'Admin',
@@ -16,7 +16,7 @@ export const mockUsers: Record<string, User> = {
   },
   'admin': {
     id: '22222222-2222-2222-2222-222222222222',
-    clerk_id: 'user_admin',
+    clerk_id: null,
     email: 'admin@liquidacapital.com',
     first_name: 'John',
     last_name: 'Manager',
@@ -28,7 +28,7 @@ export const mockUsers: Record<string, User> = {
   },
   'student': {
     id: '33333333-3333-3333-3333-333333333333',
-    clerk_id: 'user_student',
+    clerk_id: null,
     email: 'student@liquidacapital.com',
     first_name: 'Jane',
     last_name: 'Learner',
