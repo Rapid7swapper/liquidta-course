@@ -46,7 +46,7 @@ export default function Home() {
       </header>
 
       {/* Hero Section */}
-      <section className="relative min-h-screen flex flex-col md:flex-row items-center justify-center pt-20 md:pt-16 bg-gradient-to-br from-violet-950 via-slate-900 to-cyan-950">
+      <section className="relative min-h-[80vh] md:min-h-screen flex flex-col md:flex-row items-center justify-center pt-24 md:pt-16 pb-12 md:pb-0 bg-gradient-to-br from-violet-950 via-slate-900 to-cyan-950">
         {/* Desktop: 3D scene as background */}
         <div className="hidden md:block">
           <Suspense fallback={<div className="absolute inset-0 bg-gradient-to-br from-violet-950 via-slate-900 to-cyan-950" />}>
@@ -111,18 +111,6 @@ export default function Home() {
             </div>
           </motion.div>
         </div>
-
-        {/* Mobile: 3D scene below content */}
-        <motion.div
-          initial={{ opacity: 0 }}
-          animate={{ opacity: 1 }}
-          transition={{ duration: 1, delay: 0.8 }}
-          className="md:hidden w-full h-[300px] relative mt-8"
-        >
-          <Suspense fallback={<div className="absolute inset-0 bg-gradient-to-br from-violet-950 via-slate-900 to-cyan-950" />}>
-            <HeroScene />
-          </Suspense>
-        </motion.div>
 
         <motion.div
           initial={{ opacity: 0 }}
