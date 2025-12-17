@@ -84,7 +84,7 @@ export default function SignInPage() {
               />
             </div>
           </CardContent>
-          <CardFooter className="flex flex-col gap-4 pt-2">
+          <CardFooter className="flex flex-col gap-4 pt-4">
             <Button
               type="submit"
               className="w-full bg-gradient-to-r from-violet-600 to-cyan-600 hover:from-violet-500 hover:to-cyan-500"
