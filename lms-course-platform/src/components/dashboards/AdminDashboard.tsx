@@ -104,16 +104,20 @@ export default function AdminDashboard({ user }: AdminDashboardProps) {
   // Student progress state
   const [studentProgress, setStudentProgress] = useState<Record<string, { completed: number; total: number; percentage: number }>>({})
 
-  // Fetch students, deadlines, and progress on mount
+  // Fetch students and deadlines on mount
   useEffect(() => {
     fetchStudents()
     loadDeadlines()
   }, [])
 
-  // Fetch student progress when students change
+  // Fetch student progress when students change (non-blocking)
   useEffect(() => {
     if (students.length > 0) {
-      fetchStudentProgress()
+      // Delay progress fetch to not block initial render
+      const timer = setTimeout(() => {
+        fetchStudentProgress()
+      }, 500)
+      return () => clearTimeout(timer)
     }
   }, [students])
 
@@ -122,10 +126,16 @@ export default function AdminDashboard({ user }: AdminDashboardProps) {
     if (students.length === 0) return
 
     try {
+      const controller = new AbortController()
+      const timeoutId = setTimeout(() => controller.abort(), 5000) // 5 second timeout
+
       const response = await fetch('/api/course-progress', {
         cache: 'no-store',
-        headers: { 'Content-Type': 'application/json' }
+        headers: { 'Content-Type': 'application/json' },
+        signal: controller.signal
       })
+
+      clearTimeout(timeoutId)
 
       if (!response.ok) {
         console.error('Failed to fetch progress:', response.status)
