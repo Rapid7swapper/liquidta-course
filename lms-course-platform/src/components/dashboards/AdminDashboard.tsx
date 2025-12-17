@@ -119,43 +119,55 @@ export default function AdminDashboard({ user }: AdminDashboardProps) {
 
   // Fetch progress from database
   const fetchStudentProgress = async () => {
+    if (students.length === 0) return
+
     try {
-      const response = await fetch('/api/course-progress')
-      if (response.ok) {
-        const data = await response.json()
-        const progressMap: Record<string, { completed: number; total: number; percentage: number }> = {}
+      const response = await fetch('/api/course-progress', {
+        cache: 'no-store',
+        headers: { 'Content-Type': 'application/json' }
+      })
 
-        // Calculate progress for each student
-        students.forEach(student => {
-          const studentCourseProgress = data.progress?.filter(
-            (p: { user_id: string }) => p.user_id === student.id
-          ) || []
+      if (!response.ok) {
+        console.error('Failed to fetch progress:', response.status)
+        return
+      }
 
-          let totalCompleted = 0
-          let totalModules = 0
+      const data = await response.json()
+      const progressMap: Record<string, { completed: number; total: number; percentage: number }> = {}
 
-          allCourses.forEach(course => {
-            const courseProgress = studentCourseProgress.find(
-              (p: { course_id: string }) => p.course_id === course.id
-            )
-            const moduleProgress = courseProgress?.module_progress || []
-            const completed = moduleProgress.filter((m: { videoCompleted: boolean }) => m.videoCompleted).length
+      // Calculate progress for each student
+      students.forEach(student => {
+        const studentCourseProgress = data.progress?.filter(
+          (p: { user_id: string }) => p.user_id === student.id
+        ) || []
 
-            totalCompleted += completed
-            totalModules += course.modules.length
-          })
+        let totalCompleted = 0
+        let totalModules = 0
 
-          progressMap[student.id] = {
-            completed: totalCompleted,
-            total: totalModules,
-            percentage: totalModules > 0 ? Math.round((totalCompleted / totalModules) * 100) : 0
-          }
+        allCourses.forEach(course => {
+          const courseProgress = studentCourseProgress.find(
+            (p: { course_id: string }) => p.course_id === course.id
+          )
+          const moduleProgress = courseProgress?.module_progress || []
+          const completed = Array.isArray(moduleProgress)
+            ? moduleProgress.filter((m: { videoCompleted: boolean }) => m.videoCompleted).length
+            : 0
+
+          totalCompleted += completed
+          totalModules += course.modules.length
         })
 
-        setStudentProgress(progressMap)
-      }
+        progressMap[student.id] = {
+          completed: totalCompleted,
+          total: totalModules,
+          percentage: totalModules > 0 ? Math.round((totalCompleted / totalModules) * 100) : 0
+        }
+      })
+
+      setStudentProgress(progressMap)
     } catch (error) {
       console.error('Error fetching student progress:', error)
+      // Don't crash - just show 0% progress
     }
   }
 

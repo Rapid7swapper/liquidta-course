@@ -8,66 +8,56 @@ export async function GET(request: NextRequest) {
     const supabase = await createClient()
     const { data: { user } } = await supabase.auth.getUser()
 
-    console.log('[course-progress] Auth user:', user?.id, user?.email)
-
     if (!user) {
-      console.log('[course-progress] No auth user found')
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+      return NextResponse.json({ progress: [] })
     }
 
     const { searchParams } = new URL(request.url)
     const userId = searchParams.get('userId')
     const courseId = searchParams.get('courseId')
+    const fetchAll = searchParams.get('all') === 'true'
 
     const adminClient = createAdminClient()
 
     // Check if user is admin/super_admin
-    const { data: currentUser, error: userError } = await adminClient
+    const { data: currentUser } = await adminClient
       .from('users')
       .select('role')
       .eq('id', user.id)
       .single()
 
-    console.log('[course-progress] Current user role:', currentUser?.role, 'Error:', userError?.message)
+    // Super admin with all=true - fetch all progress
+    if (currentUser?.role === 'super_admin' && fetchAll) {
+      const { data: progress } = await adminClient.from('course_progress').select('*')
+      return NextResponse.json({ progress: progress || [] })
+    }
 
-    // If admin, can fetch all students' progress
+    // If admin, can fetch their students' progress
     if (currentUser?.role === 'admin' || currentUser?.role === 'super_admin') {
-      let query = adminClient.from('course_progress').select('*')
-
-      if (userId) {
-        query = query.eq('user_id', userId)
-      }
-      if (courseId) {
-        query = query.eq('course_id', courseId)
-      }
-
-      // If admin (not super_admin), only show their students
+      // For admin, get students they created
       if (currentUser?.role === 'admin') {
-        const { data: students, error: studentsError } = await adminClient
+        const { data: students } = await adminClient
           .from('users')
           .select('id')
           .eq('created_by', user.id)
 
-        console.log('[course-progress] Students created by admin:', students?.length, 'Error:', studentsError?.message)
-
         const studentIds = students?.map(s => s.id) || []
-        if (studentIds.length > 0) {
-          query = query.in('user_id', studentIds)
-        } else {
-          console.log('[course-progress] No students found for admin, returning empty')
+        if (studentIds.length === 0) {
           return NextResponse.json({ progress: [] })
         }
+
+        let query = adminClient.from('course_progress').select('*').in('user_id', studentIds)
+
+        if (courseId) {
+          query = query.eq('course_id', courseId)
+        }
+
+        const { data: progress } = await query
+        return NextResponse.json({ progress: progress || [] })
       }
 
-      const { data: progress, error } = await query
-
-      console.log('[course-progress] Progress records found:', progress?.length, 'Error:', error?.message)
-
-      if (error) {
-        console.error('Error fetching progress:', error)
-        return NextResponse.json({ progress: [] })
-      }
-
+      // Super admin without all=true - fetch all
+      const { data: progress } = await adminClient.from('course_progress').select('*')
       return NextResponse.json({ progress: progress || [] })
     }
 
