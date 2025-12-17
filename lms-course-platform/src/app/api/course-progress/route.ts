@@ -8,7 +8,10 @@ export async function GET(request: NextRequest) {
     const supabase = await createClient()
     const { data: { user } } = await supabase.auth.getUser()
 
+    console.log('[course-progress] Auth user:', user?.id, user?.email)
+
     if (!user) {
+      console.log('[course-progress] No auth user found')
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
 
@@ -19,11 +22,13 @@ export async function GET(request: NextRequest) {
     const adminClient = createAdminClient()
 
     // Check if user is admin/super_admin
-    const { data: currentUser } = await adminClient
+    const { data: currentUser, error: userError } = await adminClient
       .from('users')
       .select('role')
       .eq('id', user.id)
       .single()
+
+    console.log('[course-progress] Current user role:', currentUser?.role, 'Error:', userError?.message)
 
     // If admin, can fetch all students' progress
     if (currentUser?.role === 'admin' || currentUser?.role === 'super_admin') {
@@ -38,20 +43,25 @@ export async function GET(request: NextRequest) {
 
       // If admin (not super_admin), only show their students
       if (currentUser?.role === 'admin') {
-        const { data: students } = await adminClient
+        const { data: students, error: studentsError } = await adminClient
           .from('users')
           .select('id')
           .eq('created_by', user.id)
+
+        console.log('[course-progress] Students created by admin:', students?.length, 'Error:', studentsError?.message)
 
         const studentIds = students?.map(s => s.id) || []
         if (studentIds.length > 0) {
           query = query.in('user_id', studentIds)
         } else {
+          console.log('[course-progress] No students found for admin, returning empty')
           return NextResponse.json({ progress: [] })
         }
       }
 
       const { data: progress, error } = await query
+
+      console.log('[course-progress] Progress records found:', progress?.length, 'Error:', error?.message)
 
       if (error) {
         console.error('Error fetching progress:', error)
