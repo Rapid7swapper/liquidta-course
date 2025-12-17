@@ -5,7 +5,6 @@ import { motion } from 'framer-motion'
 import {
   Users,
   BookOpen,
-  TrendingUp,
   UserPlus,
   Mail,
   Search,
@@ -13,9 +12,7 @@ import {
   Eye,
   Edit,
   Trash2,
-  ChevronRight,
   Activity,
-  Award,
   Clock,
   Loader2,
   AlertTriangle,
@@ -24,7 +21,6 @@ import {
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
-import { Progress } from '@/components/ui/progress'
 import {
   Dialog,
   DialogContent,
@@ -101,85 +97,11 @@ export default function AdminDashboard({ user }: AdminDashboardProps) {
   const [deadlineDate, setDeadlineDate] = useState('')
   const [courseDeadlines, setCourseDeadlines] = useState<Record<string, string>>({})
 
-  // Student progress state
-  const [studentProgress, setStudentProgress] = useState<Record<string, { completed: number; total: number; percentage: number }>>({})
-
   // Fetch students and deadlines on mount
   useEffect(() => {
     fetchStudents()
     loadDeadlines()
   }, [])
-
-  // Fetch student progress when students change (non-blocking)
-  useEffect(() => {
-    if (students.length > 0) {
-      // Delay progress fetch to not block initial render
-      const timer = setTimeout(() => {
-        fetchStudentProgress()
-      }, 500)
-      return () => clearTimeout(timer)
-    }
-  }, [students])
-
-  // Fetch progress from database
-  const fetchStudentProgress = async () => {
-    if (students.length === 0) return
-
-    try {
-      const controller = new AbortController()
-      const timeoutId = setTimeout(() => controller.abort(), 5000) // 5 second timeout
-
-      const response = await fetch('/api/course-progress', {
-        cache: 'no-store',
-        headers: { 'Content-Type': 'application/json' },
-        signal: controller.signal
-      })
-
-      clearTimeout(timeoutId)
-
-      if (!response.ok) {
-        console.error('Failed to fetch progress:', response.status)
-        return
-      }
-
-      const data = await response.json()
-      const progressMap: Record<string, { completed: number; total: number; percentage: number }> = {}
-
-      // Calculate progress for each student
-      students.forEach(student => {
-        const studentCourseProgress = data.progress?.filter(
-          (p: { user_id: string }) => p.user_id === student.id
-        ) || []
-
-        let totalCompleted = 0
-        let totalModules = 0
-
-        allCourses.forEach(course => {
-          const courseProgress = studentCourseProgress.find(
-            (p: { course_id: string }) => p.course_id === course.id
-          )
-          const moduleProgress = courseProgress?.module_progress || []
-          const completed = Array.isArray(moduleProgress)
-            ? moduleProgress.filter((m: { videoCompleted: boolean }) => m.videoCompleted).length
-            : 0
-
-          totalCompleted += completed
-          totalModules += course.modules.length
-        })
-
-        progressMap[student.id] = {
-          completed: totalCompleted,
-          total: totalModules,
-          percentage: totalModules > 0 ? Math.round((totalCompleted / totalModules) * 100) : 0
-        }
-      })
-
-      setStudentProgress(progressMap)
-    } catch (error) {
-      console.error('Error fetching student progress:', error)
-      // Don't crash - just show 0% progress
-    }
-  }
 
   // Load deadlines from localStorage
   const loadDeadlines = () => {
@@ -390,23 +312,11 @@ export default function AdminDashboard({ user }: AdminDashboardProps) {
         </motion.div>
 
         {/* Stats Cards */}
-        <div className="grid grid-cols-1 md:grid-cols-4 gap-6 mb-8">
-          {(() => {
-            // Calculate average progress
-            const progressValues = Object.values(studentProgress)
-            const avgProgress = progressValues.length > 0
-              ? Math.round(progressValues.reduce((sum, p) => sum + p.percentage, 0) / progressValues.length)
-              : 0
-            // Count completed students (100% progress)
-            const completedStudents = progressValues.filter(p => p.percentage === 100).length
-
-            return [
-              { icon: <Users className="w-6 h-6" />, label: 'Total Students', value: students.length, color: 'from-violet-500 to-purple-600' },
-              { icon: <Activity className="w-6 h-6" />, label: 'Active Today', value: students.filter(s => s.is_active).length, color: 'from-green-500 to-emerald-600' },
-              { icon: <TrendingUp className="w-6 h-6" />, label: 'Avg. Progress', value: `${avgProgress}%`, color: 'from-cyan-500 to-blue-600' },
-              { icon: <Award className="w-6 h-6" />, label: 'Completed Course', value: completedStudents, color: 'from-amber-500 to-orange-600' },
-            ]
-          })().map((stat, index) => (
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-8">
+          {[
+            { icon: <Users className="w-6 h-6" />, label: 'Total Students', value: students.length, color: 'from-violet-500 to-purple-600' },
+            { icon: <Activity className="w-6 h-6" />, label: 'Active Students', value: students.filter(s => s.is_active).length, color: 'from-green-500 to-emerald-600' },
+          ].map((stat, index) => (
             <motion.div
               key={stat.label}
               initial={{ opacity: 0, y: 20 }}
@@ -589,7 +499,6 @@ export default function AdminDashboard({ user }: AdminDashboardProps) {
                     <thead>
                       <tr className="border-b border-white/10">
                         <th className="text-left py-3 px-4 text-gray-400 font-medium text-sm">Student</th>
-                        <th className="text-left py-3 px-4 text-gray-400 font-medium text-sm">Progress</th>
                         <th className="text-left py-3 px-4 text-gray-400 font-medium text-sm">Created</th>
                         <th className="text-left py-3 px-4 text-gray-400 font-medium text-sm">Status</th>
                         <th className="text-right py-3 px-4 text-gray-400 font-medium text-sm">Actions</th>
@@ -607,19 +516,6 @@ export default function AdminDashboard({ user }: AdminDashboardProps) {
                                 <p className="text-white font-medium">{student.first_name} {student.last_name}</p>
                                 <p className="text-gray-400 text-sm">{student.email}</p>
                               </div>
-                            </div>
-                          </td>
-                          <td className="py-4 px-4">
-                            <div className="w-32">
-                              <div className="flex items-center justify-between mb-1">
-                                <span className="text-white text-sm">
-                                  {studentProgress[student.id]?.percentage || 0}%
-                                </span>
-                              </div>
-                              <Progress
-                                value={studentProgress[student.id]?.percentage || 0}
-                                className="h-2 bg-slate-700"
-                              />
                             </div>
                           </td>
                           <td className="py-4 px-4">
