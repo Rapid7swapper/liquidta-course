@@ -332,7 +332,7 @@ export default function Home() {
                   <ArrowRight className="w-5 h-5" />
                 </Link>
               </Button>
-              <Button asChild variant="outline" size="lg" className="border-white text-white hover:bg-white/10 px-8 py-6 text-lg rounded-xl">
+              <Button asChild variant="outline" size="lg" className="border-white bg-white text-slate-900 hover:bg-gray-100 px-8 py-6 text-lg rounded-xl">
                 <Link href="/contact">Contact Support</Link>
               </Button>
             </div>
