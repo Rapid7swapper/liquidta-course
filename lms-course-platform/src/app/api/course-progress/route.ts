@@ -2,6 +2,15 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { createAdminClient } from '@/lib/supabase/admin'
 
+// Helper to safely get admin client
+function getAdminClient() {
+  try {
+    return createAdminClient()
+  } catch {
+    return null
+  }
+}
+
 // GET - Fetch progress for a user or all users (admin)
 export async function GET(request: NextRequest) {
   try {
@@ -13,27 +22,28 @@ export async function GET(request: NextRequest) {
     }
 
     const { searchParams } = new URL(request.url)
-    const userId = searchParams.get('userId')
     const courseId = searchParams.get('courseId')
     const fetchAll = searchParams.get('all') === 'true'
 
-    const adminClient = createAdminClient()
+    // Try to get admin client, fall back to regular client if not available
+    const adminClient = getAdminClient()
+    const dbClient = adminClient || supabase
 
     // Check if user is admin/super_admin
-    const { data: currentUser } = await adminClient
+    const { data: currentUser } = await dbClient
       .from('users')
       .select('role')
       .eq('id', user.id)
       .single()
 
     // Super admin with all=true - fetch all progress
-    if (currentUser?.role === 'super_admin' && fetchAll) {
+    if (currentUser?.role === 'super_admin' && fetchAll && adminClient) {
       const { data: progress } = await adminClient.from('course_progress').select('*')
       return NextResponse.json({ progress: progress || [] })
     }
 
     // If admin, can fetch their students' progress
-    if (currentUser?.role === 'admin' || currentUser?.role === 'super_admin') {
+    if ((currentUser?.role === 'admin' || currentUser?.role === 'super_admin') && adminClient) {
       // For admin, get students they created
       if (currentUser?.role === 'admin') {
         const { data: students } = await adminClient
@@ -61,8 +71,8 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ progress: progress || [] })
     }
 
-    // Regular user - can only fetch their own progress
-    let query = adminClient
+    // Regular user - fetch their own progress (use regular client, RLS will filter)
+    let query = dbClient
       .from('course_progress')
       .select('*')
       .eq('user_id', user.id)
@@ -81,7 +91,7 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ progress: progress || [] })
   } catch (error) {
     console.error('Error in GET course-progress:', error)
-    return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
+    return NextResponse.json({ progress: [] })
   }
 }
 
@@ -102,10 +112,12 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Course ID is required' }, { status: 400 })
     }
 
-    const adminClient = createAdminClient()
+    // Try admin client first, fall back to regular client
+    const adminClient = getAdminClient()
+    const dbClient = adminClient || supabase
 
     // Check if progress record exists
-    const { data: existing } = await adminClient
+    const { data: existing } = await dbClient
       .from('course_progress')
       .select('id')
       .eq('user_id', user.id)
@@ -122,7 +134,7 @@ export async function POST(request: NextRequest) {
 
     if (existing) {
       // Update existing record
-      const { error } = await adminClient
+      const { error } = await dbClient
         .from('course_progress')
         .update(progressData)
         .eq('id', existing.id)
@@ -133,7 +145,7 @@ export async function POST(request: NextRequest) {
       }
     } else {
       // Insert new record
-      const { error } = await adminClient
+      const { error } = await dbClient
         .from('course_progress')
         .insert(progressData)
 
