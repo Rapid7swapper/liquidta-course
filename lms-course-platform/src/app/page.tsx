@@ -238,9 +238,9 @@ export default function Home() {
             <div className="hidden md:block absolute top-1/2 left-1/4 right-1/4 h-0.5 bg-gradient-to-r from-violet-500 via-cyan-500 to-violet-500 -translate-y-1/2" />
 
             {[
-              { step: '01', title: 'Create Account', description: 'Sign up for free and set up your personalized learning profile in seconds.', icon: <Users className="w-8 h-8" /> },
-              { step: '02', title: 'Choose Your Path', description: 'Browse our extensive catalog and select courses that match your goals.', icon: <BookOpen className="w-8 h-8" /> },
-              { step: '03', title: 'Start Learning', description: 'Dive into interactive lessons, complete projects, and earn your certificate.', icon: <GraduationCap className="w-8 h-8" /> },
+              { step: '01', title: 'Contact Your Advisor', description: 'Reach out to your Liquida Advisor to get your training account set up and access credentials.', icon: <Users className="w-8 h-8" /> },
+              { step: '02', title: 'Access Your Training', description: 'Log in to your personalized dashboard and explore your assigned courses and materials.', icon: <BookOpen className="w-8 h-8" /> },
+              { step: '03', title: 'Complete & Certify', description: 'Work through the modules at your pace, complete assessments, and earn your certification.', icon: <GraduationCap className="w-8 h-8" /> },
             ].map((item, index) => (
               <motion.div
                 key={item.step}
@@ -283,26 +283,23 @@ export default function Home() {
 
           <div className="grid md:grid-cols-3 gap-8">
             <TestimonialCard
-              name="Sarah Chen"
-              role="Software Engineer"
-              company="Google"
-              content="This platform transformed my career. The courses are incredibly well-structured and the instructors are world-class. I landed my dream job within 3 months!"
+              name="Marcus Johnson"
+              role="Sales Representative"
+              content="The CRM training modules completely changed how I manage my pipeline. I now close deals faster and more efficiently than ever before."
               rating={5}
               delay={0}
             />
             <TestimonialCard
-              name="Michael Roberts"
-              role="Product Manager"
-              company="Microsoft"
-              content="The interactive projects and real-world applications made all the difference. I've tried many platforms, but this one truly stands out."
+              name="Jennifer Martinez"
+              role="Account Manager"
+              content="Understanding the Liquida business model and value ladder has given me so much more confidence when speaking with clients. Highly recommend!"
               rating={5}
               delay={0.1}
             />
             <TestimonialCard
-              name="Emily Watson"
-              role="Data Scientist"
-              company="Netflix"
-              content="The community support and mentor feedback accelerated my learning exponentially. Best investment I've made in my professional development."
+              name="David Thompson"
+              role="Team Lead"
+              content="The strategic foundation modules provided incredible insights into positioning and messaging. My team's performance has improved significantly."
               rating={5}
               delay={0.2}
             />

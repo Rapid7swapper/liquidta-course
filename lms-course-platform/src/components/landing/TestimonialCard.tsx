@@ -6,7 +6,7 @@ import { Star } from 'lucide-react'
 interface TestimonialCardProps {
   name: string
   role: string
-  company: string
+  company?: string
   content: string
   rating: number
   delay?: number
@@ -33,7 +33,7 @@ export function TestimonialCard({ name, role, company, content, rating, delay = 
         </div>
         <div>
           <h4 className="font-semibold text-white">{name}</h4>
-          <p className="text-sm text-gray-400">{role} at {company}</p>
+          <p className="text-sm text-gray-400">{role}{company ? ` at ${company}` : ''}</p>
         </div>
       </div>
     </motion.div>
