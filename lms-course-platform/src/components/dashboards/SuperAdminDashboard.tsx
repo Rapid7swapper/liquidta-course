@@ -53,6 +53,7 @@ import {
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import DashboardHeader from './DashboardHeader'
 import { AuthUser } from '@/lib/auth'
+import { allCourses } from '@/lib/course-data'
 
 interface DbUser {
   id: string
@@ -62,6 +63,14 @@ interface DbUser {
   role: string
   is_active: boolean
   created_at: string
+  created_by: string | null
+}
+
+interface StudentProgress {
+  user_id: string
+  course_id: string
+  module_progress: Array<{ moduleId: string; videoCompleted: boolean }>
+  current_module_index: number
 }
 
 interface SuperAdminDashboardProps {
@@ -83,8 +92,12 @@ export default function SuperAdminDashboard({ user }: SuperAdminDashboardProps) 
 
   // Users from database
   const [admins, setAdmins] = useState<DbUser[]>([])
+  const [superAdmins, setSuperAdmins] = useState<DbUser[]>([])
   const [students, setStudents] = useState<DbUser[]>([])
   const [loadingUsers, setLoadingUsers] = useState(true)
+
+  // Student progress from database
+  const [studentProgress, setStudentProgress] = useState<StudentProgress[]>([])
 
   // Edit modal state
   const [isEditOpen, setIsEditOpen] = useState(false)
@@ -108,9 +121,11 @@ export default function SuperAdminDashboard({ user }: SuperAdminDashboardProps) 
   const fetchUsers = async () => {
     try {
       setLoadingUsers(true)
-      const [adminsRes, studentsRes] = await Promise.all([
+      const [adminsRes, superAdminsRes, studentsRes, progressRes] = await Promise.all([
         fetch('/api/users?role=admin'),
-        fetch('/api/users?role=student')
+        fetch('/api/users?role=super_admin'),
+        fetch('/api/users?role=student'),
+        fetch('/api/course-progress?all=true')
       ])
 
       if (adminsRes.ok) {
@@ -118,9 +133,19 @@ export default function SuperAdminDashboard({ user }: SuperAdminDashboardProps) 
         setAdmins(data.users || [])
       }
 
+      if (superAdminsRes.ok) {
+        const data = await superAdminsRes.json()
+        setSuperAdmins(data.users || [])
+      }
+
       if (studentsRes.ok) {
         const data = await studentsRes.json()
         setStudents(data.users || [])
+      }
+
+      if (progressRes.ok) {
+        const data = await progressRes.json()
+        setStudentProgress(data.progress || [])
       }
     } catch (err) {
       console.error('Error fetching users:', err)
@@ -253,7 +278,48 @@ export default function SuperAdminDashboard({ user }: SuperAdminDashboardProps) 
   }
 
   const totalUsers = admins.length + students.length
-  const totalProgress = students.length > 0 ? 52 : 0 // Will be calculated from real data later
+
+  // Helper function to get a student's progress percentage
+  const getStudentProgress = (studentId: string): number => {
+    const progress = studentProgress.find(p => p.user_id === studentId)
+    if (!progress || !progress.module_progress) return 0
+
+    // Find the course
+    const course = allCourses.find(c => c.id === progress.course_id)
+    if (!course) return 0
+
+    const completedModules = progress.module_progress.filter(m => m.videoCompleted).length
+    return Math.round((completedModules / course.modules.length) * 100)
+  }
+
+  // Calculate real average progress across all students
+  const calculateAverageProgress = (): number => {
+    if (students.length === 0) return 0
+
+    const totalProgress = students.reduce((sum, student) => {
+      return sum + getStudentProgress(student.id)
+    }, 0)
+
+    return Math.round(totalProgress / students.length)
+  }
+
+  const averageProgress = calculateAverageProgress()
+
+  // Helper function to get admin name by ID
+  const getAdminName = (adminId: string | null): string => {
+    if (!adminId) return '-'
+    // Check regular admins
+    const admin = admins.find(a => a.id === adminId)
+    if (admin) {
+      return `${admin.first_name} ${admin.last_name}`
+    }
+    // Check super admins
+    const superAdmin = superAdmins.find(a => a.id === adminId)
+    if (superAdmin) {
+      return `${superAdmin.first_name} ${superAdmin.last_name}`
+    }
+    return '-'
+  }
 
   return (
     <div className="min-h-screen bg-slate-950">
@@ -281,9 +347,9 @@ export default function SuperAdminDashboard({ user }: SuperAdminDashboardProps) 
           {[
             { icon: <Shield className="w-6 h-6" />, label: 'Administrators', value: admins.length, color: 'from-red-500 to-pink-600' },
             { icon: <Users className="w-6 h-6" />, label: 'Total Students', value: students.length, color: 'from-violet-500 to-purple-600' },
-            { icon: <Activity className="w-6 h-6" />, label: 'Active Users', value: totalUsers - 1, color: 'from-green-500 to-emerald-600' },
-            { icon: <TrendingUp className="w-6 h-6" />, label: 'Avg. Progress', value: `${Math.round(totalProgress)}%`, color: 'from-cyan-500 to-blue-600' },
-            { icon: <Award className="w-6 h-6" />, label: 'Certificates', value: 4, color: 'from-amber-500 to-orange-600' },
+            { icon: <Activity className="w-6 h-6" />, label: 'Active Users', value: totalUsers, color: 'from-green-500 to-emerald-600' },
+            { icon: <TrendingUp className="w-6 h-6" />, label: 'Avg. Progress', value: `${averageProgress}%`, color: 'from-cyan-500 to-blue-600' },
+            { icon: <Award className="w-6 h-6" />, label: 'Certificates', value: 0, color: 'from-amber-500 to-orange-600' },
           ].map((stat, index) => (
             <motion.div
               key={stat.label}
@@ -316,15 +382,15 @@ export default function SuperAdminDashboard({ user }: SuperAdminDashboardProps) 
         >
           <Tabs defaultValue="admins" className="space-y-6">
             <TabsList className="bg-slate-900/50 border border-white/10 p-1">
-              <TabsTrigger value="admins" className="data-[state=active]:bg-gradient-to-r data-[state=active]:from-red-600 data-[state=active]:to-pink-600">
+              <TabsTrigger value="admins" className="text-gray-300 data-[state=active]:text-white data-[state=active]:bg-gradient-to-r data-[state=active]:from-red-600 data-[state=active]:to-pink-600">
                 <Shield className="w-4 h-4 mr-2" />
                 Administrators
               </TabsTrigger>
-              <TabsTrigger value="students" className="data-[state=active]:bg-gradient-to-r data-[state=active]:from-violet-600 data-[state=active]:to-cyan-600">
+              <TabsTrigger value="students" className="text-gray-300 data-[state=active]:text-white data-[state=active]:bg-gradient-to-r data-[state=active]:from-violet-600 data-[state=active]:to-cyan-600">
                 <Users className="w-4 h-4 mr-2" />
                 All Students
               </TabsTrigger>
-              <TabsTrigger value="analytics" className="data-[state=active]:bg-gradient-to-r data-[state=active]:from-cyan-600 data-[state=active]:to-blue-600">
+              <TabsTrigger value="analytics" className="text-gray-300 data-[state=active]:text-white data-[state=active]:bg-gradient-to-r data-[state=active]:from-cyan-600 data-[state=active]:to-blue-600">
                 <BarChart3 className="w-4 h-4 mr-2" />
                 Analytics
               </TabsTrigger>
@@ -600,63 +666,71 @@ export default function SuperAdminDashboard({ user }: SuperAdminDashboardProps) 
                             </td>
                           </tr>
                         ) : (
-                          students.map((student) => (
-                            <tr key={student.id} className="border-b border-white/5 hover:bg-white/5 transition-colors">
-                              <td className="py-4 px-4">
-                                <div className="flex items-center gap-3">
-                                  <div className="w-10 h-10 rounded-full bg-gradient-to-br from-violet-500 to-cyan-500 flex items-center justify-center text-white font-bold">
-                                    {student.first_name.charAt(0)}
+                          students.map((student) => {
+                            const progress = getStudentProgress(student.id)
+                            const studentProgressData = studentProgress.find(p => p.user_id === student.id)
+                            const course = studentProgressData ? allCourses.find(c => c.id === studentProgressData.course_id) : null
+                            const completedModules = studentProgressData?.module_progress?.filter(m => m.videoCompleted).length || 0
+                            const totalModules = course?.modules.length || 0
+
+                            return (
+                              <tr key={student.id} className="border-b border-white/5 hover:bg-white/5 transition-colors">
+                                <td className="py-4 px-4">
+                                  <div className="flex items-center gap-3">
+                                    <div className="w-10 h-10 rounded-full bg-gradient-to-br from-violet-500 to-cyan-500 flex items-center justify-center text-white font-bold">
+                                      {student.first_name.charAt(0)}
+                                    </div>
+                                    <div>
+                                      <p className="text-white font-medium">{student.first_name} {student.last_name}</p>
+                                      <p className="text-gray-400 text-sm">{student.email}</p>
+                                    </div>
                                   </div>
-                                  <div>
-                                    <p className="text-white font-medium">{student.first_name} {student.last_name}</p>
-                                    <p className="text-gray-400 text-sm">{student.email}</p>
+                                </td>
+                                <td className="py-4 px-4">
+                                  <span className="text-amber-400 text-sm">{getAdminName(student.created_by)}</span>
+                                </td>
+                                <td className="py-4 px-4">
+                                  <div className="w-32">
+                                    <div className="flex items-center justify-between mb-1">
+                                      <span className="text-white text-sm">{progress}%</span>
+                                    </div>
+                                    <Progress value={progress} className="h-2 bg-slate-700" />
                                   </div>
-                                </div>
-                              </td>
-                              <td className="py-4 px-4">
-                                <span className="text-amber-400 text-sm">-</span>
-                              </td>
-                              <td className="py-4 px-4">
-                                <div className="w-32">
-                                  <div className="flex items-center justify-between mb-1">
-                                    <span className="text-white text-sm">0%</span>
+                                </td>
+                                <td className="py-4 px-4">
+                                  <span className="text-white">{completedModules}/{totalModules}</span>
+                                </td>
+                                <td className="py-4 px-4">
+                                  <span className="text-gray-400 text-sm">
+                                    {new Date(student.created_at).toLocaleDateString()}
+                                  </span>
+                                </td>
+                                <td className="py-4 px-4">
+                                  <div className="flex items-center justify-end gap-2">
+                                    <Button variant="ghost" size="sm" className="text-gray-400 hover:text-white">
+                                      <Eye className="w-4 h-4" />
+                                    </Button>
+                                    <Button
+                                      variant="ghost"
+                                      size="sm"
+                                      className="text-gray-400 hover:text-white"
+                                      onClick={() => handleEditClick(student)}
+                                    >
+                                      <Edit className="w-4 h-4" />
+                                    </Button>
+                                    <Button
+                                      variant="ghost"
+                                      size="sm"
+                                      className="text-gray-400 hover:text-red-400"
+                                      onClick={() => handleDeleteClick(student)}
+                                    >
+                                      <Trash2 className="w-4 h-4" />
+                                    </Button>
                                   </div>
-                                  <Progress value={0} className="h-2 bg-slate-700" />
-                                </div>
-                              </td>
-                              <td className="py-4 px-4">
-                                <span className="text-white">0/0</span>
-                              </td>
-                              <td className="py-4 px-4">
-                                <span className="text-gray-400 text-sm">
-                                  {new Date(student.created_at).toLocaleDateString()}
-                                </span>
-                              </td>
-                              <td className="py-4 px-4">
-                                <div className="flex items-center justify-end gap-2">
-                                  <Button variant="ghost" size="sm" className="text-gray-400 hover:text-white">
-                                    <Eye className="w-4 h-4" />
-                                  </Button>
-                                  <Button
-                                    variant="ghost"
-                                    size="sm"
-                                    className="text-gray-400 hover:text-white"
-                                    onClick={() => handleEditClick(student)}
-                                  >
-                                    <Edit className="w-4 h-4" />
-                                  </Button>
-                                  <Button
-                                    variant="ghost"
-                                    size="sm"
-                                    className="text-gray-400 hover:text-red-400"
-                                    onClick={() => handleDeleteClick(student)}
-                                  >
-                                    <Trash2 className="w-4 h-4" />
-                                  </Button>
-                                </div>
-                              </td>
-                            </tr>
-                          ))
+                                </td>
+                              </tr>
+                            )
+                          })
                         )}
                       </tbody>
                     </table>
@@ -678,10 +752,9 @@ export default function SuperAdminDashboard({ user }: SuperAdminDashboardProps) 
                   <CardContent>
                     <div className="space-y-6">
                       {[
-                        { label: 'Overall Completion Rate', value: 67 },
-                        { label: 'Average Quiz Score', value: 84 },
-                        { label: 'Student Engagement', value: 78 },
-                        { label: 'Certification Rate', value: 52 },
+                        { label: 'Average Progress', value: averageProgress },
+                        { label: 'Students with Progress', value: students.length > 0 ? Math.round((studentProgress.length / students.length) * 100) : 0 },
+                        { label: 'Certification Rate', value: 0 },
                       ].map((stat) => (
                         <div key={stat.label}>
                           <div className="flex justify-between mb-2">
@@ -699,7 +772,7 @@ export default function SuperAdminDashboard({ user }: SuperAdminDashboardProps) 
                   <CardHeader>
                     <CardTitle className="text-white flex items-center gap-2">
                       <Activity className="w-5 h-5 text-green-400" />
-                      Admin Performance
+                      Administrator Overview
                     </CardTitle>
                   </CardHeader>
                   <CardContent>
@@ -709,7 +782,7 @@ export default function SuperAdminDashboard({ user }: SuperAdminDashboardProps) 
                           <p className="text-gray-400">No administrators to display.</p>
                         </div>
                       ) : (
-                        admins.map((admin, index) => (
+                        admins.map((admin) => (
                           <div key={admin.id} className="p-4 rounded-lg bg-slate-800/50">
                             <div className="flex items-center justify-between mb-3">
                               <div className="flex items-center gap-3">
@@ -718,21 +791,13 @@ export default function SuperAdminDashboard({ user }: SuperAdminDashboardProps) 
                                 </div>
                                 <span className="text-white font-medium">{admin.first_name} {admin.last_name}</span>
                               </div>
-                              <span className="text-sm text-gray-400">0 students</span>
+                              <span className={`text-xs px-2 py-1 rounded-full ${admin.is_active ? 'bg-green-500/20 text-green-400' : 'bg-red-500/20 text-red-400'}`}>
+                                {admin.is_active ? 'Active' : 'Inactive'}
+                              </span>
                             </div>
-                            <div className="grid grid-cols-3 gap-4 text-center">
-                              <div>
-                                <p className="text-xl font-bold text-white">0</p>
-                                <p className="text-xs text-gray-400">Active</p>
-                              </div>
-                              <div>
-                                <p className="text-xl font-bold text-cyan-400">0%</p>
-                                <p className="text-xs text-gray-400">Avg Progress</p>
-                              </div>
-                              <div>
-                                <p className="text-xl font-bold text-green-400">{index}</p>
-                                <p className="text-xs text-gray-400">Certificates</p>
-                              </div>
+                            <div className="text-sm text-gray-400">
+                              <p>Email: {admin.email}</p>
+                              <p>Joined: {new Date(admin.created_at).toLocaleDateString()}</p>
                             </div>
                           </div>
                         ))
@@ -744,37 +809,24 @@ export default function SuperAdminDashboard({ user }: SuperAdminDashboardProps) 
                 <Card className="bg-slate-900/50 border-white/10 md:col-span-2">
                   <CardHeader>
                     <CardTitle className="text-white flex items-center gap-2">
-                      <AlertTriangle className="w-5 h-5 text-amber-400" />
-                      System Alerts
+                      <Activity className="w-5 h-5 text-cyan-400" />
+                      Platform Summary
                     </CardTitle>
                   </CardHeader>
                   <CardContent>
-                    <div className="space-y-3">
-                      {[
-                        { type: 'warning', message: '2 students have not logged in for 7+ days', action: 'Send Reminder' },
-                        { type: 'info', message: 'New course available: Advanced Compliance Training', action: 'Assign' },
-                        { type: 'success', message: '3 students completed certification this week', action: 'View' },
-                      ].map((alert, index) => (
-                        <div key={index} className={`p-4 rounded-lg flex items-center justify-between ${
-                          alert.type === 'warning' ? 'bg-amber-500/10 border border-amber-500/20' :
-                          alert.type === 'info' ? 'bg-blue-500/10 border border-blue-500/20' :
-                          'bg-green-500/10 border border-green-500/20'
-                        }`}>
-                          <div className="flex items-center gap-3">
-                            {alert.type === 'warning' && <AlertTriangle className="w-5 h-5 text-amber-400" />}
-                            {alert.type === 'info' && <Activity className="w-5 h-5 text-blue-400" />}
-                            {alert.type === 'success' && <CheckCircle className="w-5 h-5 text-green-400" />}
-                            <span className={`text-sm ${
-                              alert.type === 'warning' ? 'text-amber-300' :
-                              alert.type === 'info' ? 'text-blue-300' :
-                              'text-green-300'
-                            }`}>{alert.message}</span>
-                          </div>
-                          <Button variant="ghost" size="sm" className="text-white hover:bg-white/10">
-                            {alert.action}
-                          </Button>
-                        </div>
-                      ))}
+                    <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                      <div className="p-4 rounded-lg bg-slate-800/50 text-center">
+                        <p className="text-3xl font-bold text-white">{students.length}</p>
+                        <p className="text-gray-400">Total Students</p>
+                      </div>
+                      <div className="p-4 rounded-lg bg-slate-800/50 text-center">
+                        <p className="text-3xl font-bold text-cyan-400">{averageProgress}%</p>
+                        <p className="text-gray-400">Average Progress</p>
+                      </div>
+                      <div className="p-4 rounded-lg bg-slate-800/50 text-center">
+                        <p className="text-3xl font-bold text-green-400">{studentProgress.length}</p>
+                        <p className="text-gray-400">Students Started</p>
+                      </div>
                     </div>
                   </CardContent>
                 </Card>

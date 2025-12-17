@@ -22,6 +22,11 @@ export default function MuxVideoPlayer({
   const [hasCompleted, setHasCompleted] = useState(false)
   const playerRef = useRef<HTMLElement>(null)
 
+  // Reset hasCompleted state when video changes
+  useEffect(() => {
+    setHasCompleted(false)
+  }, [playbackId])
+
   // Handle video ended
   const handleEnded = () => {
     if (!hasCompleted) {

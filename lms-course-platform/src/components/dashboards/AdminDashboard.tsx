@@ -18,7 +18,9 @@ import {
   Award,
   Clock,
   Loader2,
-  AlertTriangle
+  AlertTriangle,
+  Calendar,
+  CalendarClock
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
@@ -93,10 +95,112 @@ export default function AdminDashboard({ user }: AdminDashboardProps) {
   const [deletingStudent, setDeletingStudent] = useState<DbUser | null>(null)
   const [isDeleteLoading, setIsDeleteLoading] = useState(false)
 
-  // Fetch students on mount
+  // Deadline state
+  const [isDeadlineOpen, setIsDeadlineOpen] = useState(false)
+  const [selectedCourse, setSelectedCourse] = useState<{ id: string; title: string } | null>(null)
+  const [deadlineDate, setDeadlineDate] = useState('')
+  const [courseDeadlines, setCourseDeadlines] = useState<Record<string, string>>({})
+
+  // Student progress state
+  const [studentProgress, setStudentProgress] = useState<Record<string, { completed: number; total: number; percentage: number }>>({})
+
+  // Fetch students, deadlines, and progress on mount
   useEffect(() => {
     fetchStudents()
+    loadDeadlines()
   }, [])
+
+  // Fetch student progress when students change
+  useEffect(() => {
+    if (students.length > 0) {
+      fetchStudentProgress()
+    }
+  }, [students])
+
+  // Fetch progress from database
+  const fetchStudentProgress = async () => {
+    try {
+      const response = await fetch('/api/course-progress')
+      if (response.ok) {
+        const data = await response.json()
+        const progressMap: Record<string, { completed: number; total: number; percentage: number }> = {}
+
+        // Calculate progress for each student
+        students.forEach(student => {
+          const studentCourseProgress = data.progress?.filter(
+            (p: { user_id: string }) => p.user_id === student.id
+          ) || []
+
+          let totalCompleted = 0
+          let totalModules = 0
+
+          allCourses.forEach(course => {
+            const courseProgress = studentCourseProgress.find(
+              (p: { course_id: string }) => p.course_id === course.id
+            )
+            const moduleProgress = courseProgress?.module_progress || []
+            const completed = moduleProgress.filter((m: { videoCompleted: boolean }) => m.videoCompleted).length
+
+            totalCompleted += completed
+            totalModules += course.modules.length
+          })
+
+          progressMap[student.id] = {
+            completed: totalCompleted,
+            total: totalModules,
+            percentage: totalModules > 0 ? Math.round((totalCompleted / totalModules) * 100) : 0
+          }
+        })
+
+        setStudentProgress(progressMap)
+      }
+    } catch (error) {
+      console.error('Error fetching student progress:', error)
+    }
+  }
+
+  // Load deadlines from localStorage
+  const loadDeadlines = () => {
+    const stored = localStorage.getItem('course_deadlines')
+    if (stored) {
+      try {
+        setCourseDeadlines(JSON.parse(stored))
+      } catch (e) {
+        console.error('Error loading deadlines:', e)
+      }
+    }
+  }
+
+  // Save deadline
+  const handleSaveDeadline = () => {
+    if (!selectedCourse || !deadlineDate) return
+
+    const newDeadlines = {
+      ...courseDeadlines,
+      [selectedCourse.id]: deadlineDate
+    }
+
+    localStorage.setItem('course_deadlines', JSON.stringify(newDeadlines))
+    setCourseDeadlines(newDeadlines)
+    setIsDeadlineOpen(false)
+    setSelectedCourse(null)
+    setDeadlineDate('')
+  }
+
+  // Remove deadline
+  const handleRemoveDeadline = (courseId: string) => {
+    const newDeadlines = { ...courseDeadlines }
+    delete newDeadlines[courseId]
+    localStorage.setItem('course_deadlines', JSON.stringify(newDeadlines))
+    setCourseDeadlines(newDeadlines)
+  }
+
+  // Open deadline dialog
+  const handleSetDeadline = (course: { id: string; title: string }) => {
+    setSelectedCourse(course)
+    setDeadlineDate(courseDeadlines[course.id] || '')
+    setIsDeadlineOpen(true)
+  }
 
   const fetchStudents = async () => {
     try {
@@ -265,12 +369,22 @@ export default function AdminDashboard({ user }: AdminDashboardProps) {
 
         {/* Stats Cards */}
         <div className="grid grid-cols-1 md:grid-cols-4 gap-6 mb-8">
-          {[
-            { icon: <Users className="w-6 h-6" />, label: 'Total Students', value: students.length, color: 'from-violet-500 to-purple-600' },
-            { icon: <Activity className="w-6 h-6" />, label: 'Active Today', value: students.filter(s => s.is_active).length, color: 'from-green-500 to-emerald-600' },
-            { icon: <TrendingUp className="w-6 h-6" />, label: 'Avg. Progress', value: '0%', color: 'from-cyan-500 to-blue-600' },
-            { icon: <Award className="w-6 h-6" />, label: 'Certificates Issued', value: 0, color: 'from-amber-500 to-orange-600' },
-          ].map((stat, index) => (
+          {(() => {
+            // Calculate average progress
+            const progressValues = Object.values(studentProgress)
+            const avgProgress = progressValues.length > 0
+              ? Math.round(progressValues.reduce((sum, p) => sum + p.percentage, 0) / progressValues.length)
+              : 0
+            // Count completed students (100% progress)
+            const completedStudents = progressValues.filter(p => p.percentage === 100).length
+
+            return [
+              { icon: <Users className="w-6 h-6" />, label: 'Total Students', value: students.length, color: 'from-violet-500 to-purple-600' },
+              { icon: <Activity className="w-6 h-6" />, label: 'Active Today', value: students.filter(s => s.is_active).length, color: 'from-green-500 to-emerald-600' },
+              { icon: <TrendingUp className="w-6 h-6" />, label: 'Avg. Progress', value: `${avgProgress}%`, color: 'from-cyan-500 to-blue-600' },
+              { icon: <Award className="w-6 h-6" />, label: 'Completed Course', value: completedStudents, color: 'from-amber-500 to-orange-600' },
+            ]
+          })().map((stat, index) => (
             <motion.div
               key={stat.label}
               initial={{ opacity: 0, y: 20 }}
@@ -476,9 +590,14 @@ export default function AdminDashboard({ user }: AdminDashboardProps) {
                           <td className="py-4 px-4">
                             <div className="w-32">
                               <div className="flex items-center justify-between mb-1">
-                                <span className="text-white text-sm">0%</span>
+                                <span className="text-white text-sm">
+                                  {studentProgress[student.id]?.percentage || 0}%
+                                </span>
                               </div>
-                              <Progress value={0} className="h-2 bg-slate-700" />
+                              <Progress
+                                value={studentProgress[student.id]?.percentage || 0}
+                                className="h-2 bg-slate-700"
+                              />
                             </div>
                           </td>
                           <td className="py-4 px-4">
@@ -642,6 +761,56 @@ export default function AdminDashboard({ user }: AdminDashboardProps) {
           </AlertDialogContent>
         </AlertDialog>
 
+        {/* Deadline Setting Dialog */}
+        <Dialog open={isDeadlineOpen} onOpenChange={setIsDeadlineOpen}>
+          <DialogContent className="bg-slate-900 border-white/10 text-white">
+            <DialogHeader>
+              <DialogTitle className="flex items-center gap-2">
+                <CalendarClock className="w-5 h-5 text-cyan-400" />
+                Set Course Deadline
+              </DialogTitle>
+              <DialogDescription className="text-gray-400">
+                Set a completion deadline for {selectedCourse?.title}
+              </DialogDescription>
+            </DialogHeader>
+            <div className="space-y-4 mt-4">
+              <div className="space-y-2">
+                <Label htmlFor="deadline">Deadline Date</Label>
+                <Input
+                  id="deadline"
+                  type="date"
+                  className="bg-slate-800 border-white/10"
+                  value={deadlineDate}
+                  onChange={(e) => setDeadlineDate(e.target.value)}
+                  min={new Date().toISOString().split('T')[0]}
+                />
+              </div>
+              <div className="flex items-center gap-2 p-3 rounded-lg bg-cyan-500/10 border border-cyan-500/20">
+                <Calendar className="w-4 h-4 text-cyan-400" />
+                <span className="text-sm text-cyan-300">
+                  Students will see this deadline on their dashboard
+                </span>
+              </div>
+              <DialogFooter className="mt-6">
+                <Button
+                  variant="outline"
+                  onClick={() => setIsDeadlineOpen(false)}
+                  className="border-white/10"
+                >
+                  Cancel
+                </Button>
+                <Button
+                  className="bg-gradient-to-r from-violet-600 to-cyan-600"
+                  onClick={handleSaveDeadline}
+                  disabled={!deadlineDate}
+                >
+                  Save Deadline
+                </Button>
+              </DialogFooter>
+            </div>
+          </DialogContent>
+        </Dialog>
+
         {/* Course Overview & Quick Actions */}
         <div className="grid md:grid-cols-2 gap-6">
           <motion.div
@@ -653,25 +822,67 @@ export default function AdminDashboard({ user }: AdminDashboardProps) {
               <CardHeader>
                 <CardTitle className="text-white flex items-center gap-2">
                   <BookOpen className="w-5 h-5 text-violet-400" />
-                  Course Overview
+                  Course Overview & Deadlines
                 </CardTitle>
+                <CardDescription className="text-gray-400">
+                  Set completion deadlines for your courses
+                </CardDescription>
               </CardHeader>
               <CardContent>
                 <div className="space-y-4">
-                  {allCourses.map((course) => (
-                    <div key={course.id} className="flex items-center justify-between p-3 rounded-lg bg-slate-800/50 hover:bg-slate-800 transition-colors">
-                      <div className="flex items-center gap-3">
-                        <div className="w-10 h-10 rounded-lg bg-gradient-to-br from-violet-500/20 to-cyan-500/20 flex items-center justify-center">
-                          <BookOpen className="w-5 h-5 text-violet-400" />
+                  {allCourses.map((course) => {
+                    const deadline = courseDeadlines[course.id]
+                    const deadlineDate = deadline ? new Date(deadline) : null
+                    const isOverdue = deadlineDate && deadlineDate < new Date()
+
+                    return (
+                      <div key={course.id} className="p-3 rounded-lg bg-slate-800/50 hover:bg-slate-800 transition-colors">
+                        <div className="flex items-center justify-between">
+                          <div className="flex items-center gap-3">
+                            <div className="w-10 h-10 rounded-lg bg-gradient-to-br from-violet-500/20 to-cyan-500/20 flex items-center justify-center">
+                              <BookOpen className="w-5 h-5 text-violet-400" />
+                            </div>
+                            <div>
+                              <p className="text-white text-sm font-medium">{course.title}</p>
+                              <p className="text-gray-400 text-xs">{course.modules.length} modules • {course.totalDuration}</p>
+                            </div>
+                          </div>
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            className="text-cyan-400 hover:text-cyan-300 hover:bg-cyan-500/10"
+                            onClick={() => handleSetDeadline({ id: course.id, title: course.title })}
+                          >
+                            <CalendarClock className="w-4 h-4 mr-1" />
+                            {deadline ? 'Edit' : 'Set Deadline'}
+                          </Button>
                         </div>
-                        <div>
-                          <p className="text-white text-sm font-medium">{course.title}</p>
-                          <p className="text-gray-400 text-xs">{course.modules.length} modules • {course.totalDuration}</p>
-                        </div>
+                        {deadline && (
+                          <div className="mt-3 flex items-center justify-between pl-13">
+                            <div className={`flex items-center gap-2 text-xs ${isOverdue ? 'text-red-400' : 'text-cyan-400'}`}>
+                              <Calendar className="w-3 h-3" />
+                              <span>
+                                Deadline: {deadlineDate?.toLocaleDateString('en-US', {
+                                  month: 'short',
+                                  day: 'numeric',
+                                  year: 'numeric'
+                                })}
+                                {isOverdue && ' (Overdue)'}
+                              </span>
+                            </div>
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              className="text-gray-400 hover:text-red-400 text-xs h-6 px-2"
+                              onClick={() => handleRemoveDeadline(course.id)}
+                            >
+                              Remove
+                            </Button>
+                          </div>
+                        )}
                       </div>
-                      <ChevronRight className="w-4 h-4 text-gray-400" />
-                    </div>
-                  ))}
+                    )
+                  })}
                 </div>
               </CardContent>
             </Card>
@@ -691,24 +902,28 @@ export default function AdminDashboard({ user }: AdminDashboardProps) {
               </CardHeader>
               <CardContent>
                 <div className="space-y-4">
-                  {[
-                    { action: 'Jane Learner completed Module 6', time: '2 hours ago', type: 'completion' },
-                    { action: 'Bob Smith earned a certificate', time: '5 hours ago', type: 'certificate' },
-                    { action: 'Alice Johnson started new course', time: 'Yesterday', type: 'enrollment' },
-                    { action: 'Jane Learner scored 92% on quiz', time: 'Yesterday', type: 'quiz' },
-                  ].map((activity, index) => (
-                    <div key={index} className="flex items-start gap-3 pb-3 border-b border-white/5 last:border-0 last:pb-0">
-                      <div className={`w-2 h-2 rounded-full mt-2 ${
-                        activity.type === 'completion' ? 'bg-green-400' :
-                        activity.type === 'certificate' ? 'bg-amber-400' :
-                        activity.type === 'quiz' ? 'bg-cyan-400' : 'bg-violet-400'
-                      }`} />
-                      <div className="flex-1">
-                        <p className="text-white text-sm">{activity.action}</p>
-                        <p className="text-gray-400 text-xs">{activity.time}</p>
+                  {students.length > 0 ? (
+                    students.slice(0, 4).map((student, index) => (
+                      <div key={index} className="flex items-start gap-3 pb-3 border-b border-white/5 last:border-0 last:pb-0">
+                        <div className="w-2 h-2 rounded-full mt-2 bg-violet-400" />
+                        <div className="flex-1">
+                          <p className="text-white text-sm">{student.first_name} {student.last_name} was added</p>
+                          <p className="text-gray-400 text-xs">
+                            {new Date(student.created_at).toLocaleDateString('en-US', {
+                              month: 'short',
+                              day: 'numeric'
+                            })}
+                          </p>
+                        </div>
                       </div>
+                    ))
+                  ) : (
+                    <div className="text-center py-4">
+                      <Activity className="w-8 h-8 text-gray-600 mx-auto mb-2" />
+                      <p className="text-gray-400 text-sm">No recent activity</p>
+                      <p className="text-gray-500 text-xs">Add students to see activity here</p>
                     </div>
-                  ))}
+                  )}
                 </div>
               </CardContent>
             </Card>

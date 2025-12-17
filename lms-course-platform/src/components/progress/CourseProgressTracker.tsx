@@ -1,17 +1,13 @@
 'use client'
 
-import { useState, useEffect } from 'react'
 import { motion } from 'framer-motion'
-import { CheckCircle, Circle, Lock, Play, BookOpen, Award } from 'lucide-react'
+import { CheckCircle, Circle, Lock, Play, BookOpen, Trophy } from 'lucide-react'
 import { Progress } from '@/components/ui/progress'
-import { Course, Module } from '@/lib/course-data'
+import { Course } from '@/lib/course-data'
 
 interface ModuleProgress {
   moduleId: string
   videoCompleted: boolean
-  quizCompleted: boolean
-  quizScore: number | null
-  quizPassed: boolean
 }
 
 interface CourseProgressTrackerProps {
@@ -29,21 +25,19 @@ export default function CourseProgressTracker({
 }: CourseProgressTrackerProps) {
   const totalModules = course.modules.length
 
-  // Calculate overall progress
-  const completedModules = moduleProgress.filter(
-    m => m.videoCompleted && m.quizPassed
-  ).length
+  // Calculate overall progress (video completion only)
+  const completedModules = moduleProgress.filter(m => m.videoCompleted).length
   const overallProgress = Math.round((completedModules / totalModules) * 100)
 
   // Check if module is accessible (unlocked)
   const isModuleAccessible = (moduleIndex: number) => {
     if (moduleIndex === 0) return true
 
-    // Module is accessible if previous module is completed
+    // Module is accessible if previous module's video is completed
     const prevModule = moduleProgress.find(
       m => m.moduleId === course.modules[moduleIndex - 1].id
     )
-    return prevModule?.videoCompleted && prevModule?.quizPassed
+    return prevModule?.videoCompleted === true
   }
 
   // Get module status
@@ -56,12 +50,8 @@ export default function CourseProgressTracker({
       return moduleIndex === 0 ? 'available' : 'locked'
     }
 
-    if (progress.videoCompleted && progress.quizPassed) {
-      return 'completed'
-    }
-
     if (progress.videoCompleted) {
-      return 'quiz-pending'
+      return 'completed'
     }
 
     return isModuleAccessible(moduleIndex) ? 'available' : 'locked'
@@ -88,7 +78,6 @@ export default function CourseProgressTracker({
       <div className="max-h-[500px] overflow-y-auto">
         {course.modules.map((module, index) => {
           const status = getModuleStatus(index)
-          const progress = moduleProgress.find(m => m.moduleId === module.id)
           const isActive = index === currentModuleIndex
           const isAccessible = isModuleAccessible(index)
 
@@ -111,10 +100,6 @@ export default function CourseProgressTracker({
                 {status === 'completed' ? (
                   <div className="w-6 h-6 rounded-full bg-green-500 flex items-center justify-center">
                     <CheckCircle className="w-4 h-4 text-white" />
-                  </div>
-                ) : status === 'quiz-pending' ? (
-                  <div className="w-6 h-6 rounded-full bg-amber-500 flex items-center justify-center">
-                    <Award className="w-4 h-4 text-white" />
                   </div>
                 ) : status === 'available' ? (
                   <div className="w-6 h-6 rounded-full bg-violet-500/20 border-2 border-violet-500 flex items-center justify-center">
@@ -146,30 +131,8 @@ export default function CourseProgressTracker({
                 >
                   {module.title}
                 </p>
-                <p className="text-xs text-gray-500 mt-0.5">{module.duration}</p>
-
-                {/* Progress indicators */}
-                {progress && (
-                  <div className="flex items-center gap-3 mt-2">
-                    {progress.videoCompleted && (
-                      <span className="text-xs text-green-400 flex items-center gap-1">
-                        <CheckCircle className="w-3 h-3" />
-                        Video
-                      </span>
-                    )}
-                    {progress.quizPassed && (
-                      <span className="text-xs text-green-400 flex items-center gap-1">
-                        <CheckCircle className="w-3 h-3" />
-                        Quiz ({progress.quizScore}%)
-                      </span>
-                    )}
-                    {progress.videoCompleted && !progress.quizPassed && (
-                      <span className="text-xs text-amber-400 flex items-center gap-1">
-                        <Award className="w-3 h-3" />
-                        Quiz pending
-                      </span>
-                    )}
-                  </div>
+                {module.duration && (
+                  <p className="text-xs text-gray-500 mt-0.5">{module.duration}</p>
                 )}
               </div>
 
@@ -201,7 +164,7 @@ export default function CourseProgressTracker({
         >
           <div className="flex items-center gap-3">
             <div className="w-10 h-10 rounded-full bg-green-500 flex items-center justify-center">
-              <Award className="w-6 h-6 text-white" />
+              <Trophy className="w-6 h-6 text-white" />
             </div>
             <div>
               <p className="text-green-300 font-semibold">Course Completed!</p>

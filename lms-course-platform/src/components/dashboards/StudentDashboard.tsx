@@ -13,7 +13,8 @@ import {
   ChevronRight,
   GraduationCap,
   Calendar,
-  Target
+  Target,
+  AlertCircle
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
@@ -26,42 +27,157 @@ interface StudentDashboardProps {
   user: AuthUser
 }
 
-// Course progress state for enrolled courses
-interface CourseProgress {
+// Module progress from course page
+interface ModuleProgress {
+  moduleId: string
+  videoCompleted: boolean
+}
+
+// Stored course progress
+interface StoredProgress {
+  moduleProgress: ModuleProgress[]
+  currentModuleIndex: number
+}
+
+// Activity item
+interface ActivityItem {
+  action: string
+  course: string
+  time: string
+  timestamp: number
+}
+
+// Deadline item
+interface DeadlineItem {
   courseId: string
-  completedModules: number[]
-  quizScores: Record<string, number>
+  courseName: string
+  deadline: string
+  daysRemaining: number
 }
 
 export default function StudentDashboard({ user }: StudentDashboardProps) {
-  // In production, this would come from database
-  const [courseProgress, setCourseProgress] = useState<CourseProgress[]>([])
+  const [courseProgress, setCourseProgress] = useState<Record<string, StoredProgress>>({})
+  const [recentActivity, setRecentActivity] = useState<ActivityItem[]>([])
+  const [deadlines, setDeadlines] = useState<DeadlineItem[]>([])
+  const userId = user.supabaseId || user.id
 
   // Load progress from localStorage on mount
   useEffect(() => {
-    const savedProgress = localStorage.getItem(`progress_${user.supabaseId || user.id}`)
-    if (savedProgress) {
-      setCourseProgress(JSON.parse(savedProgress))
+    const loadProgress = () => {
+      const progress: Record<string, StoredProgress> = {}
+      const activities: ActivityItem[] = []
+
+      allCourses.forEach(course => {
+        const savedProgress = localStorage.getItem(`course_progress_${userId}_${course.id}`)
+        if (savedProgress) {
+          try {
+            const parsed = JSON.parse(savedProgress) as StoredProgress
+            progress[course.id] = parsed
+
+            // Generate activity items from progress
+            if (parsed.moduleProgress) {
+              parsed.moduleProgress.forEach(mp => {
+                if (mp.videoCompleted) {
+                  const module = course.modules.find(m => m.id === mp.moduleId)
+                  if (module) {
+                    activities.push({
+                      action: `Completed ${module.title}`,
+                      course: course.title,
+                      time: 'Recently',
+                      timestamp: Date.now()
+                    })
+                  }
+                }
+              })
+            }
+          } catch (e) {
+            console.error('Error parsing progress:', e)
+          }
+        }
+      })
+
+      setCourseProgress(progress)
+
+      // Sort activities and take the most recent 4
+      const sortedActivities = activities.slice(0, 4)
+      if (sortedActivities.length > 0) {
+        setRecentActivity(sortedActivities)
+      }
     }
-  }, [user.supabaseId, user.id])
+
+    // Load deadlines
+    const loadDeadlines = () => {
+      const storedDeadlines = localStorage.getItem('course_deadlines')
+      if (storedDeadlines) {
+        try {
+          const parsed = JSON.parse(storedDeadlines) as Record<string, string>
+          const deadlineItems: DeadlineItem[] = []
+
+          Object.entries(parsed).forEach(([courseId, deadline]) => {
+            const course = allCourses.find(c => c.id === courseId)
+            if (course && deadline) {
+              const deadlineDate = new Date(deadline)
+              const today = new Date()
+              const diffTime = deadlineDate.getTime() - today.getTime()
+              const daysRemaining = Math.ceil(diffTime / (1000 * 60 * 60 * 24))
+
+              deadlineItems.push({
+                courseId,
+                courseName: course.title,
+                deadline: deadlineDate.toLocaleDateString('en-US', {
+                  month: 'short',
+                  day: 'numeric',
+                  year: 'numeric'
+                }),
+                daysRemaining
+              })
+            }
+          })
+
+          // Sort by days remaining
+          deadlineItems.sort((a, b) => a.daysRemaining - b.daysRemaining)
+          setDeadlines(deadlineItems)
+        } catch (e) {
+          console.error('Error parsing deadlines:', e)
+        }
+      }
+    }
+
+    loadProgress()
+    loadDeadlines()
+  }, [userId])
 
   // Calculate progress percentage for a course
   const getProgressPercentage = (courseId: string) => {
-    const progress = courseProgress.find(p => p.courseId === courseId)
+    const progress = courseProgress[courseId]
     const course = allCourses.find(c => c.id === courseId)
-    if (!progress || !course) return 0
-    return Math.round((progress.completedModules.length / course.modules.length) * 100)
+    if (!progress?.moduleProgress || !course) return 0
+
+    const completedCount = progress.moduleProgress.filter(m => m.videoCompleted).length
+    return Math.round((completedCount / course.modules.length) * 100)
   }
 
   // Get completed modules count
   const getCompletedModulesCount = (courseId: string) => {
-    const progress = courseProgress.find(p => p.courseId === courseId)
-    return progress?.completedModules.length || 0
+    const progress = courseProgress[courseId]
+    if (!progress?.moduleProgress) return 0
+    return progress.moduleProgress.filter(m => m.videoCompleted).length
   }
 
-  const overallProgress = allCourses.length > 0
-    ? Math.round(allCourses.reduce((acc, course) => acc + getProgressPercentage(course.id), 0) / allCourses.length)
+  // Calculate totals
+  const totalModulesCompleted = allCourses.reduce((acc, course) =>
+    acc + getCompletedModulesCount(course.id), 0
+  )
+
+  const totalModules = allCourses.reduce((acc, course) =>
+    acc + course.modules.length, 0
+  )
+
+  const overallProgress = totalModules > 0
+    ? Math.round((totalModulesCompleted / totalModules) * 100)
     : 0
+
+  const completedCourses = allCourses.filter(c => getProgressPercentage(c.id) === 100).length
 
   return (
     <div className="min-h-screen bg-slate-950">
@@ -89,8 +205,8 @@ export default function StudentDashboard({ user }: StudentDashboardProps) {
           {[
             { icon: <BookOpen className="w-6 h-6" />, label: 'Enrolled Courses', value: allCourses.length, color: 'from-violet-500 to-purple-600' },
             { icon: <Target className="w-6 h-6" />, label: 'Overall Progress', value: `${overallProgress}%`, color: 'from-cyan-500 to-blue-600' },
-            { icon: <CheckCircle className="w-6 h-6" />, label: 'Completed', value: allCourses.filter(c => getProgressPercentage(c.id) === 100).length, color: 'from-green-500 to-emerald-600' },
-            { icon: <Award className="w-6 h-6" />, label: 'Certificates', value: allCourses.filter(c => getProgressPercentage(c.id) === 100).length, color: 'from-amber-500 to-orange-600' },
+            { icon: <CheckCircle className="w-6 h-6" />, label: 'Modules Done', value: totalModulesCompleted, color: 'from-green-500 to-emerald-600' },
+            { icon: <Award className="w-6 h-6" />, label: 'Courses Completed', value: completedCourses, color: 'from-amber-500 to-orange-600' },
           ].map((stat, index) => (
             <motion.div
               key={stat.label}
@@ -124,7 +240,7 @@ export default function StudentDashboard({ user }: StudentDashboardProps) {
         >
           <div className="flex items-center justify-between mb-6">
             <h3 className="text-xl font-bold text-white">Continue Learning</h3>
-            <Link href="/dashboard/courses" className="text-violet-400 hover:text-violet-300 flex items-center gap-1 text-sm">
+            <Link href="/dashboard/student/courses" className="text-violet-400 hover:text-violet-300 flex items-center gap-1 text-sm">
               View All <ChevronRight className="w-4 h-4" />
             </Link>
           </div>
@@ -133,6 +249,8 @@ export default function StudentDashboard({ user }: StudentDashboardProps) {
             {allCourses.map((course, index) => {
               const progress = getProgressPercentage(course.id)
               const completedModules = getCompletedModulesCount(course.id)
+              const deadline = deadlines.find(d => d.courseId === course.id)
+
               return (
                 <motion.div
                   key={course.id}
@@ -149,6 +267,20 @@ export default function StudentDashboard({ user }: StudentDashboardProps) {
                         {progress > 0 && (
                           <div className="absolute top-3 right-3 px-2 py-1 rounded-full bg-violet-500/80 text-white text-xs font-medium">
                             {progress}% Complete
+                          </div>
+                        )}
+                        {deadline && (
+                          <div className={`absolute top-3 left-3 px-2 py-1 rounded-full text-xs font-medium flex items-center gap-1 ${
+                            deadline.daysRemaining <= 3
+                              ? 'bg-red-500/80 text-white'
+                              : deadline.daysRemaining <= 7
+                              ? 'bg-amber-500/80 text-white'
+                              : 'bg-cyan-500/80 text-white'
+                          }`}>
+                            <Calendar className="w-3 h-3" />
+                            {deadline.daysRemaining <= 0
+                              ? 'Overdue'
+                              : `${deadline.daysRemaining}d left`}
                           </div>
                         )}
                       </div>
@@ -170,7 +302,11 @@ export default function StudentDashboard({ user }: StudentDashboardProps) {
                           </div>
                           <Progress value={progress} className="h-2 bg-slate-700" />
                           <Button className="w-full bg-gradient-to-r from-violet-600 to-cyan-600 hover:from-violet-500 hover:to-cyan-500">
-                            {progress > 0 ? (
+                            {progress === 100 ? (
+                              <>
+                                <CheckCircle className="w-4 h-4 mr-2" /> Completed
+                              </>
+                            ) : progress > 0 ? (
                               <>
                                 <Play className="w-4 h-4 mr-2" /> Continue
                               </>
@@ -206,20 +342,23 @@ export default function StudentDashboard({ user }: StudentDashboardProps) {
               </CardHeader>
               <CardContent>
                 <div className="space-y-4">
-                  {[
-                    { action: 'Completed Module 6', course: 'Financial Analysis', time: '2 hours ago' },
-                    { action: 'Quiz Score: 92%', course: 'Financial Analysis', time: '3 hours ago' },
-                    { action: 'Started Module 2', course: 'Risk Management', time: 'Yesterday' },
-                    { action: 'Enrolled in course', course: 'Compliance & Regulations', time: '3 days ago' },
-                  ].map((activity, index) => (
-                    <div key={index} className="flex items-start gap-3 pb-3 border-b border-white/5 last:border-0 last:pb-0">
-                      <div className="w-2 h-2 rounded-full bg-violet-400 mt-2" />
-                      <div className="flex-1">
-                        <p className="text-white text-sm">{activity.action}</p>
-                        <p className="text-gray-400 text-xs">{activity.course} • {activity.time}</p>
+                  {recentActivity.length > 0 ? (
+                    recentActivity.map((activity, index) => (
+                      <div key={index} className="flex items-start gap-3 pb-3 border-b border-white/5 last:border-0 last:pb-0">
+                        <div className="w-2 h-2 rounded-full bg-green-400 mt-2" />
+                        <div className="flex-1">
+                          <p className="text-white text-sm">{activity.action}</p>
+                          <p className="text-gray-400 text-xs">{activity.course} • {activity.time}</p>
+                        </div>
                       </div>
+                    ))
+                  ) : (
+                    <div className="text-center py-4">
+                      <TrendingUp className="w-8 h-8 text-gray-600 mx-auto mb-2" />
+                      <p className="text-gray-400 text-sm">No activity yet</p>
+                      <p className="text-gray-500 text-xs">Start watching videos to track your progress</p>
                     </div>
-                  ))}
+                  )}
                 </div>
               </CardContent>
             </Card>
@@ -239,22 +378,44 @@ export default function StudentDashboard({ user }: StudentDashboardProps) {
               </CardHeader>
               <CardContent>
                 <div className="space-y-4">
-                  {[
-                    { task: 'Complete Risk Assessment Quiz', course: 'Risk Management', due: 'Dec 15, 2024' },
-                    { task: 'Finish Module 3', course: 'Risk Management', due: 'Dec 18, 2024' },
-                    { task: 'Final Exam', course: 'Financial Analysis', due: 'Dec 20, 2024' },
-                  ].map((deadline, index) => (
-                    <div key={index} className="flex items-start gap-3 pb-3 border-b border-white/5 last:border-0 last:pb-0">
-                      <div className="w-8 h-8 rounded-lg bg-cyan-500/20 flex items-center justify-center">
-                        <Calendar className="w-4 h-4 text-cyan-400" />
+                  {deadlines.length > 0 ? (
+                    deadlines.map((deadline, index) => (
+                      <div key={index} className="flex items-start gap-3 pb-3 border-b border-white/5 last:border-0 last:pb-0">
+                        <div className={`w-8 h-8 rounded-lg flex items-center justify-center ${
+                          deadline.daysRemaining <= 3
+                            ? 'bg-red-500/20'
+                            : deadline.daysRemaining <= 7
+                            ? 'bg-amber-500/20'
+                            : 'bg-cyan-500/20'
+                        }`}>
+                          {deadline.daysRemaining <= 3 ? (
+                            <AlertCircle className={`w-4 h-4 ${deadline.daysRemaining <= 0 ? 'text-red-400' : 'text-amber-400'}`} />
+                          ) : (
+                            <Calendar className="w-4 h-4 text-cyan-400" />
+                          )}
+                        </div>
+                        <div className="flex-1">
+                          <p className="text-white text-sm">Complete Course</p>
+                          <p className="text-gray-400 text-xs">{deadline.courseName}</p>
+                        </div>
+                        <span className={`text-xs ${
+                          deadline.daysRemaining <= 0
+                            ? 'text-red-400'
+                            : deadline.daysRemaining <= 3
+                            ? 'text-amber-400'
+                            : 'text-cyan-400'
+                        }`}>
+                          {deadline.deadline}
+                        </span>
                       </div>
-                      <div className="flex-1">
-                        <p className="text-white text-sm">{deadline.task}</p>
-                        <p className="text-gray-400 text-xs">{deadline.course}</p>
-                      </div>
-                      <span className="text-xs text-amber-400">{deadline.due}</span>
+                    ))
+                  ) : (
+                    <div className="text-center py-4">
+                      <Calendar className="w-8 h-8 text-gray-600 mx-auto mb-2" />
+                      <p className="text-gray-400 text-sm">No deadlines set</p>
+                      <p className="text-gray-500 text-xs">Your admin will set deadlines for courses</p>
                     </div>
-                  ))}
+                  )}
                 </div>
               </CardContent>
             </Card>

@@ -374,6 +374,35 @@ export type Database = {
           issued_at?: string
         }
       }
+      course_progress: {
+        Row: {
+          id: string
+          user_id: string
+          course_id: string
+          module_progress: Json
+          current_module_index: number
+          created_at: string
+          updated_at: string
+        }
+        Insert: {
+          id?: string
+          user_id: string
+          course_id: string
+          module_progress?: Json
+          current_module_index?: number
+          created_at?: string
+          updated_at?: string
+        }
+        Update: {
+          id?: string
+          user_id?: string
+          course_id?: string
+          module_progress?: Json
+          current_module_index?: number
+          created_at?: string
+          updated_at?: string
+        }
+      }
       users: {
         Row: {
           id: string
