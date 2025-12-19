@@ -18,6 +18,7 @@ export default function SignInPage() {
   const router = useRouter()
   const searchParams = useSearchParams()
   const redirect = searchParams.get('redirect') || '/dashboard'
+  const reason = searchParams.get('reason')
 
   const handleSignIn = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -54,6 +55,13 @@ export default function SignInPage() {
         </CardHeader>
         <form onSubmit={handleSignIn}>
           <CardContent className="space-y-4">
+            {reason === 'inactivity' && (
+              <Alert className="bg-amber-900/50 border-amber-700 text-amber-200">
+                <AlertDescription>
+                  You were logged out due to inactivity. Please sign in again.
+                </AlertDescription>
+              </Alert>
+            )}
             {error && (
               <Alert variant="destructive">
                 <AlertDescription>{error}</AlertDescription>
