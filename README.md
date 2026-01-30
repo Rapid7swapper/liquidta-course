@@ -1,45 +1,24 @@
-# Claude Code Setup
+Liquida Capital Brokerage Academy
+A Learning Management System (LMS) built for Liquida Capital to deliver online courses and training for their brokerage academy.
+Features. The client never paid me so fuck him.
 
-This project has the Anthropic Claude API SDK installed and ready to use.
+Course Management – Create, organize, and manage course content and modules
+User Authentication – Secure login and registration powered by Clerk
+Admin Dashboard – Analytics and management tools for administrators
+Responsive Design – Optimized for desktop and mobile devices
 
-## Setup
+Tech Stack
 
-1. **Activate the virtual environment:**
-   ```bash
-   source venv/bin/activate
-   ```
+Framework: Next.js
+Database: PostgreSQL
+ORM: Prisma
+Authentication: Clerk
+Deployment: Vercel
 
-2. **Set your API key:**
-   ```bash
-   export ANTHROPIC_API_KEY="your-api-key-here"
-   ```
-   
-   Or create a `.env` file with:
-   ```
-   ANTHROPIC_API_KEY=your-api-key-here
-   ```
+Getting Started
+Prerequisites
 
-3. **Run the example:**
-   ```bash
-   python example.py
-   ```
-
-## Getting an API Key
-
-If you don't have an API key yet, you can get one from:
-https://console.anthropic.com/
-
-## Installation
-
-The Claude SDK is already installed in the virtual environment. If you need to reinstall:
-
-```bash
-source venv/bin/activate
-pip install -r requirements.txt
-```
-
-## Documentation
-
-For more information, visit:
-https://docs.anthropic.com/claude/reference/getting-started-with-the-api
+Node.js 18+
+PostgreSQL database
+Clerk account (for auth keys)
 
